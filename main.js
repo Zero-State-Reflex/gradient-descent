@@ -191,21 +191,6 @@ const surfaceMat = new THREE.MeshStandardMaterial({
 const surface = new THREE.Mesh(surfaceGeo, surfaceMat);
 scene.add(surface);
 
-// ── Wireframe overlay ───────────────────────────────────────────────────
-const wireGeo = new THREE.PlaneGeometry(SURFACE_SIZE * 2, SURFACE_SIZE * 2, 80, 80);
-wireGeo.rotateX(-Math.PI / 2);
-const wirePos = wireGeo.attributes.position;
-for (let i = 0; i < wirePos.count; i++) {
-  wirePos.setY(i, lossFunction(wirePos.getX(i), wirePos.getZ(i)) + 0.01);
-}
-wireGeo.computeVertexNormals();
-const wireMat = new THREE.MeshBasicMaterial({
-  color: 0x4488ff,
-  wireframe: true,
-  transparent: true,
-  opacity: 0.06,
-});
-scene.add(new THREE.Mesh(wireGeo, wireMat));
 
 // ── Valley glow: point lights in the deepest pits ───────────────────────
 const valleyGlow1 = new THREE.PointLight(0x6622cc, 2.0, 5);
@@ -460,55 +445,22 @@ const dustMat = new THREE.PointsMaterial({
 const dust = new THREE.Points(dustGeo, dustMat);
 scene.add(dust);
 
-// ── Contour lines on surface ────────────────────────────────────────────
-function createContourLines() {
-  const contourGroup = new THREE.Group();
-  const levels = 18;
-  for (let l = 0; l < levels; l++) {
-    const targetY = yMin + (l + 1) * (yMax - yMin) / (levels + 1);
-    const points = [];
-    const res = 250;
-    const step = (SURFACE_SIZE * 2) / res;
-
-    for (let ix = 0; ix < res; ix++) {
-      for (let iz = 0; iz < res; iz++) {
-        const x = -SURFACE_SIZE + ix * step;
-        const z = -SURFACE_SIZE + iz * step;
-        const y00 = lossFunction(x, z);
-        const y10 = lossFunction(x + step, z);
-        const y01 = lossFunction(x, z + step);
-
-        if ((y00 - targetY) * (y10 - targetY) < 0) {
-          const t = (targetY - y00) / (y10 - y00);
-          points.push(new THREE.Vector3(x + t * step, targetY + 0.02, z));
-        }
-        if ((y00 - targetY) * (y01 - targetY) < 0) {
-          const t = (targetY - y00) / (y01 - y00);
-          points.push(new THREE.Vector3(x, targetY + 0.02, z + t * step));
-        }
-      }
-    }
-
-    if (points.length > 0) {
-      const geo = new THREE.BufferGeometry().setFromPoints(points);
-      const tNorm = l / levels;
-      const color = new THREE.Color().lerpColors(
-        new THREE.Color(0x2a0a6a), new THREE.Color(0x60e0ff), tNorm
-      );
-      const mat = new THREE.PointsMaterial({
-        color,
-        size: 0.012,
-        transparent: true,
-        opacity: 0.4,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-      contourGroup.add(new THREE.Points(geo, mat));
-    }
-  }
-  scene.add(contourGroup);
+// ── Tron grid on surface ────────────────────────────────────────────────
+const tronGridRes = 128;
+const tronGeo = new THREE.PlaneGeometry(SURFACE_SIZE * 2, SURFACE_SIZE * 2, tronGridRes, tronGridRes);
+tronGeo.rotateX(-Math.PI / 2);
+const tronPos = tronGeo.attributes.position;
+for (let i = 0; i < tronPos.count; i++) {
+  tronPos.setY(i, lossFunction(tronPos.getX(i), tronPos.getZ(i)) + 0.03);
 }
-createContourLines();
+tronGeo.computeVertexNormals();
+const tronMat = new THREE.MeshBasicMaterial({
+  color: 0x4488ff,
+  wireframe: true,
+  transparent: true,
+  opacity: 0.1,
+});
+scene.add(new THREE.Mesh(tronGeo, tronMat));
 
 // ── Arrow helpers showing gradient at grid points ───────────────────────
 function createGradientField() {
@@ -539,7 +491,7 @@ function createGradientField() {
 createGradientField();
 
 // ════════════════════════════════════════════════════════════════════════
-// ── AMBIENT MUSIC ENGINE (Web Audio API) ───────────────────────────────
+// ── DEEP SYNTH ENGINE (Web Audio API) ─────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════
 
 let audioCtx, masterGain, muted = false;
@@ -547,214 +499,215 @@ let audioCtx, masterGain, muted = false;
 function initAudio() {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = 0.6;
+  masterGain.gain.value = 0.55;
 
-  // ── Reverb via convolver ──────────────────────────────────────────
+  // ── Long reverb (6 seconds) ───────────────────────────────────────
   const convolver = audioCtx.createConvolver();
-  const reverbLen = audioCtx.sampleRate * 4;
+  const reverbLen = audioCtx.sampleRate * 6;
   const reverbBuf = audioCtx.createBuffer(2, reverbLen, audioCtx.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
     const data = reverbBuf.getChannelData(ch);
     for (let i = 0; i < reverbLen; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 1.8));
+      // Long tail with early reflections
+      const early = i < audioCtx.sampleRate * 0.1 ? Math.random() * 0.5 : 0;
+      data[i] = ((Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 2.8))) + early * Math.exp(-i / (audioCtx.sampleRate * 0.05));
     }
   }
   convolver.buffer = reverbBuf;
 
   const reverbGain = audioCtx.createGain();
-  reverbGain.gain.value = 0.3;
+  reverbGain.gain.value = 0.55; // heavy wet mix
   const dryGain = audioCtx.createGain();
-  dryGain.gain.value = 0.7;
+  dryGain.gain.value = 0.45;
 
   masterGain.connect(dryGain).connect(audioCtx.destination);
   masterGain.connect(convolver).connect(reverbGain).connect(audioCtx.destination);
 
-  // ── Drone layer: stacked detuned oscillators ──────────────────────
-  const droneNotes = [55, 82.41, 110, 164.81]; // A1, E2, A2, E3
-  droneNotes.forEach((freq, i) => {
-    const osc = audioCtx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.value = freq;
+  // ── Deep drone: sub bass + tritone interval ───────────────────────
+  // Root A1 (55Hz) + Tritone Eb2 (77.78Hz) — the devil's interval
+  const droneFreqs = [
+    { f: 36.71, type: 'sine', vol: 0.05 },     // D1 sub
+    { f: 55, type: 'sine', vol: 0.04 },         // A1
+    { f: 55 * 1.002, type: 'sine', vol: 0.035 }, // A1 detuned
+    { f: 77.78, type: 'triangle', vol: 0.02 },  // Eb2 (tritone of A)
+    { f: 77.78 * 0.997, type: 'sine', vol: 0.018 }, // Eb2 detuned
+    { f: 110, type: 'sine', vol: 0.015 },       // A2 octave
+    { f: 155.56, type: 'sine', vol: 0.008 },    // Eb3 tritone octave
+  ];
 
-    const osc2 = audioCtx.createOscillator();
-    osc2.type = 'sine';
-    osc2.frequency.value = freq * 1.002; // slight detune for chorus
+  droneFreqs.forEach((d, i) => {
+    const osc = audioCtx.createOscillator();
+    osc.type = d.type;
+    osc.frequency.value = d.f;
 
     const gain = audioCtx.createGain();
-    gain.gain.value = 0.04 / (i + 1);
+    gain.gain.value = d.vol;
 
     const filter = audioCtx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.value = 400 + i * 100;
-    filter.Q.value = 1;
+    filter.frequency.value = 200 + i * 60;
+    filter.Q.value = 0.7;
 
-    // Slow LFO on filter
+    // Very slow LFO on volume for breathing
     const lfo = audioCtx.createOscillator();
     lfo.type = 'sine';
-    lfo.frequency.value = 0.05 + i * 0.02;
+    lfo.frequency.value = 0.02 + i * 0.008;
     const lfoGain = audioCtx.createGain();
-    lfoGain.gain.value = 150;
-    lfo.connect(lfoGain).connect(filter.frequency);
+    lfoGain.gain.value = d.vol * 0.3;
+    lfo.connect(lfoGain).connect(gain.gain);
     lfo.start();
 
-    osc.connect(gain);
-    osc2.connect(gain);
-    gain.connect(filter).connect(masterGain);
+    // Slow filter sweep
+    const filterLfo = audioCtx.createOscillator();
+    filterLfo.type = 'sine';
+    filterLfo.frequency.value = 0.03 + i * 0.005;
+    const filterLfoGain = audioCtx.createGain();
+    filterLfoGain.gain.value = 80;
+    filterLfo.connect(filterLfoGain).connect(filter.frequency);
+    filterLfo.start();
+
+    osc.connect(gain).connect(filter).connect(masterGain);
     osc.start();
-    osc2.start();
   });
 
-  // ── Pad layer: slow evolving chords ───────────────────────────────
-  function createPad(freqs, startTime, duration) {
-    freqs.forEach(freq => {
-      const osc = audioCtx.createOscillator();
-      osc.type = 'triangle';
-      osc.frequency.value = freq;
+  // ── Deep synth note player ────────────────────────────────────────
+  // Plays a soft, long note with saw+sine layers through heavy filtering
+  function playSynthNote(freq, time, duration, vel) {
+    const now = audioCtx.currentTime + time;
+    const attack = Math.min(duration * 0.35, 4);
+    const release = Math.min(duration * 0.45, 6);
 
-      const osc2 = audioCtx.createOscillator();
-      osc2.type = 'sine';
-      osc2.frequency.value = freq * 0.998;
+    // Layer 1: filtered sawtooth (main body)
+    const saw = audioCtx.createOscillator();
+    saw.type = 'sawtooth';
+    saw.frequency.value = freq;
 
-      const gain = audioCtx.createGain();
-      const now = audioCtx.currentTime + startTime;
-      const attack = duration * 0.3;
-      const release = duration * 0.4;
-      gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(0.015, now + attack);
-      gain.gain.setValueAtTime(0.015, now + duration - release);
-      gain.gain.linearRampToValueAtTime(0, now + duration);
+    // Layer 2: sine an octave below
+    const sub = audioCtx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.value = freq * 0.5;
 
-      const filter = audioCtx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.value = 800;
-      filter.Q.value = 2;
-      filter.frequency.setValueAtTime(300, now);
-      filter.frequency.linearRampToValueAtTime(1200, now + duration * 0.5);
-      filter.frequency.linearRampToValueAtTime(400, now + duration);
+    // Layer 3: detuned triangle for width
+    const tri = audioCtx.createOscillator();
+    tri.type = 'triangle';
+    tri.frequency.value = freq * 1.003;
 
-      osc.connect(gain);
-      osc2.connect(gain);
-      gain.connect(filter).connect(masterGain);
-      osc.start(now);
-      osc2.start(now);
-      osc.stop(now + duration + 0.1);
-      osc2.stop(now + duration + 0.1);
-    });
+    const sawGain = audioCtx.createGain();
+    const amp = 0.018 * vel;
+    sawGain.gain.setValueAtTime(0, now);
+    sawGain.gain.linearRampToValueAtTime(amp, now + attack);
+    sawGain.gain.setValueAtTime(amp, now + duration - release);
+    sawGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    const subGain = audioCtx.createGain();
+    subGain.gain.setValueAtTime(0, now);
+    subGain.gain.linearRampToValueAtTime(amp * 0.6, now + attack);
+    subGain.gain.setValueAtTime(amp * 0.6, now + duration - release);
+    subGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    const triGain = audioCtx.createGain();
+    triGain.gain.setValueAtTime(0, now);
+    triGain.gain.linearRampToValueAtTime(amp * 0.3, now + attack);
+    triGain.gain.setValueAtTime(amp * 0.3, now + duration - release);
+    triGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    // Low-pass filter with slow sweep
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.Q.value = 3;
+    filter.frequency.setValueAtTime(100, now);
+    filter.frequency.linearRampToValueAtTime(600 + freq * 0.8, now + attack * 1.5);
+    filter.frequency.linearRampToValueAtTime(150, now + duration);
+
+    const mix = audioCtx.createGain();
+    saw.connect(sawGain).connect(mix);
+    sub.connect(subGain).connect(mix);
+    tri.connect(triGain).connect(mix);
+    mix.connect(filter).connect(masterGain);
+
+    saw.start(now);
+    sub.start(now);
+    tri.start(now);
+    saw.stop(now + duration + 1);
+    sub.stop(now + duration + 1);
+    tri.stop(now + duration + 1);
   }
 
-  // Chord progression: Am - Fmaj7 - C - Em
-  const chords = [
-    [220, 261.63, 329.63],        // Am
-    [174.61, 220, 261.63, 329.63], // Fmaj7
-    [261.63, 329.63, 392],         // C
-    [164.81, 246.94, 329.63],      // Em
+  // ── Tritone pad progression ───────────────────────────────────────
+  // Dark chords built on tritone intervals (augmented fourths)
+  // A-Eb, D-Ab, E-Bb, Bb-E — all tritone pairs
+  const darkChords = [
+    [55, 77.78, 110, 155.56],         // A1 + Eb2 + A2 + Eb3
+    [73.42, 103.83, 146.83, 207.65],  // D2 + Ab2 + D3 + Ab3
+    [82.41, 116.54, 164.81],          // E2 + Bb2 + E3
+    [58.27, 82.41, 116.54, 164.81],   // Bb1 + E2 + Bb2 + E3
   ];
 
   function schedulePads() {
-    const cycleDuration = 32; // seconds per full progression
-    const chordDur = cycleDuration / chords.length;
-    chords.forEach((chord, i) => {
-      createPad(chord, i * chordDur, chordDur * 1.3); // overlap
+    const cycleDuration = 48; // longer, more meditative
+    const chordDur = cycleDuration / darkChords.length;
+    darkChords.forEach((chord, i) => {
+      chord.forEach(freq => {
+        playSynthNote(freq, i * chordDur, chordDur * 1.4, 0.7 + Math.random() * 0.3);
+      });
     });
     setTimeout(schedulePads, cycleDuration * 1000);
   }
   schedulePads();
 
-  // ── Bell/chime layer: generative melodic pings ────────────────────
-  function playBell(freq, time, vel) {
-    const osc = audioCtx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.value = freq;
+  // ── Soft melodic notes: slow, sparse, deep, reverbed ──────────────
+  // Tritone-based scale: A, Bb, D, Eb, E — dark and unresolved
+  const deepScale = [55, 58.27, 73.42, 77.78, 82.41, 110, 116.54, 146.83, 155.56, 164.81];
 
-    // Harmonics for bell timbre
-    const osc2 = audioCtx.createOscillator();
-    osc2.type = 'sine';
-    osc2.frequency.value = freq * 2.756; // inharmonic partial
-
-    const osc3 = audioCtx.createOscillator();
-    osc3.type = 'sine';
-    osc3.frequency.value = freq * 5.404;
-
-    const gain = audioCtx.createGain();
-    const now = audioCtx.currentTime + time;
-    const amp = 0.02 * vel;
-    gain.gain.setValueAtTime(amp, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 4);
-
-    const gain2 = audioCtx.createGain();
-    gain2.gain.setValueAtTime(amp * 0.3, now);
-    gain2.gain.exponentialRampToValueAtTime(0.0001, now + 2);
-
-    const gain3 = audioCtx.createGain();
-    gain3.gain.setValueAtTime(amp * 0.1, now);
-    gain3.gain.exponentialRampToValueAtTime(0.0001, now + 1);
-
-    const filter = audioCtx.createBiquadFilter();
-    filter.type = 'highpass';
-    filter.frequency.value = 200;
-
-    osc.connect(gain).connect(filter).connect(masterGain);
-    osc2.connect(gain2).connect(filter);
-    osc3.connect(gain3).connect(filter);
-
-    osc.start(now);
-    osc2.start(now);
-    osc3.start(now);
-    osc.stop(now + 5);
-    osc2.stop(now + 3);
-    osc3.stop(now + 2);
-  }
-
-  // Pentatonic scale notes mapped to particle loss values
-  const bellScale = [440, 523.25, 659.25, 783.99, 880, 1046.5, 1318.5];
-
-  function scheduleBells() {
-    const interval = 1.5 + Math.random() * 3;
+  function scheduleDeepNote() {
+    const interval = 4 + Math.random() * 8; // sparse: 4-12 seconds apart
     if (particles.length > 0 && !muted) {
       const p = particles[Math.floor(Math.random() * particles.length)];
       const normalizedLoss = Math.max(0, Math.min(1, (p.y - yMin) / (yMax - yMin)));
-      const noteIdx = Math.floor(normalizedLoss * (bellScale.length - 1));
-      const vel = 0.3 + (1 - normalizedLoss) * 0.7;
-      playBell(bellScale[noteIdx], 0, vel);
+      // Lower loss = lower pitch
+      const noteIdx = Math.floor((1 - normalizedLoss) * (deepScale.length - 1));
+      const freq = deepScale[noteIdx];
+      const duration = 6 + Math.random() * 10; // 6-16 second notes
+      const vel = 0.3 + (1 - normalizedLoss) * 0.5;
+      playSynthNote(freq, 0, duration, vel);
 
-      // Sometimes add a harmony note
-      if (Math.random() > 0.5) {
-        const harmIdx = Math.min(bellScale.length - 1, noteIdx + 2);
-        playBell(bellScale[harmIdx], 0.15 + Math.random() * 0.3, vel * 0.5);
+      // Sometimes add tritone harmony
+      if (Math.random() > 0.6) {
+        const tritoneFreq = freq * Math.SQRT2; // tritone = freq * sqrt(2)
+        playSynthNote(tritoneFreq, 0.5 + Math.random() * 2, duration * 0.8, vel * 0.4);
       }
     }
-    setTimeout(scheduleBells, interval * 1000);
+    setTimeout(scheduleDeepNote, interval * 1000);
   }
-  setTimeout(scheduleBells, 2000);
+  setTimeout(scheduleDeepNote, 3000);
 
   // ── Sub bass pulse: tied to convergence ───────────────────────────
   function subPulse() {
-    if (muted || !audioCtx) { setTimeout(subPulse, 4000); return; }
+    if (muted || !audioCtx) { setTimeout(subPulse, 5000); return; }
 
     const convergedCount = particles.filter(p => p.converged).length;
     if (convergedCount > 0) {
       const osc = audioCtx.createOscillator();
       osc.type = 'sine';
-      osc.frequency.value = 40 + convergedCount * 5;
+      osc.frequency.value = 30 + convergedCount * 3;
       const gain = audioCtx.createGain();
       const now = audioCtx.currentTime;
       gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(0.06, now + 1);
-      gain.gain.linearRampToValueAtTime(0, now + 3);
+      gain.gain.linearRampToValueAtTime(0.05, now + 2);
+      gain.gain.linearRampToValueAtTime(0, now + 6);
       osc.connect(gain).connect(masterGain);
       osc.start(now);
-      osc.stop(now + 3.5);
+      osc.stop(now + 7);
     }
-
-    setTimeout(subPulse, 3000 + Math.random() * 2000);
+    setTimeout(subPulse, 5000 + Math.random() * 4000);
   }
-  setTimeout(subPulse, 5000);
+  setTimeout(subPulse, 6000);
 
-  // ── Texture layer: filtered noise swooshes ────────────────────────
-  function noiseSwish() {
-    if (muted || !audioCtx) { setTimeout(noiseSwish, 8000); return; }
+  // ── Texture: very slow filtered noise washes ──────────────────────
+  function noiseWash() {
+    if (muted || !audioCtx) { setTimeout(noiseWash, 12000); return; }
 
-    const bufferSize = audioCtx.sampleRate * 3;
+    const bufferSize = audioCtx.sampleRate * 6;
     const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
@@ -765,25 +718,25 @@ function initAudio() {
     source.buffer = buffer;
 
     const filter = audioCtx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.Q.value = 15;
+    filter.type = 'lowpass';
+    filter.Q.value = 2;
     const now = audioCtx.currentTime;
-    filter.frequency.setValueAtTime(200, now);
-    filter.frequency.exponentialRampToValueAtTime(2000, now + 1.5);
-    filter.frequency.exponentialRampToValueAtTime(300, now + 3);
+    filter.frequency.setValueAtTime(60, now);
+    filter.frequency.linearRampToValueAtTime(400, now + 3);
+    filter.frequency.linearRampToValueAtTime(80, now + 6);
 
     const gain = audioCtx.createGain();
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.008, now + 0.5);
-    gain.gain.linearRampToValueAtTime(0, now + 3);
+    gain.gain.linearRampToValueAtTime(0.006, now + 2);
+    gain.gain.linearRampToValueAtTime(0, now + 6);
 
     source.connect(filter).connect(gain).connect(masterGain);
     source.start(now);
-    source.stop(now + 3.5);
+    source.stop(now + 7);
 
-    setTimeout(noiseSwish, 6000 + Math.random() * 10000);
+    setTimeout(noiseWash, 10000 + Math.random() * 15000);
   }
-  setTimeout(noiseSwish, 3000);
+  setTimeout(noiseWash, 5000);
 }
 
 // ── Mute toggle ─────────────────────────────────────────────────────────
