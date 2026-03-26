@@ -33,7 +33,15 @@
 <body>
   <div id="title">Gradient Descent</div>
   <div id="stats"></div>
-  <div id="info">click to restart &middot; scroll to zoom</div>
+  <div id="info">click to restart &middot; scroll to zoom &middot; press M to mute</div>
+  <div id="sound-prompt" style="position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,5,16,0.92);display:flex;align-items:center;justify-content:center;
+    z-index:100;cursor:pointer;flex-direction:column;gap:16px;">
+    <div style="color:rgba(100,200,255,0.9);font-size:13px;letter-spacing:5px;text-transform:uppercase;">
+      Gradient Descent</div>
+    <div style="color:rgba(255,255,255,0.5);font-size:11px;letter-spacing:3px;text-transform:uppercase;">
+      click to begin</div>
+  </div>
   <script type="module" src="/main.js"></script>
 </body>
 </html>
