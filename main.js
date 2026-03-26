@@ -739,15 +739,51 @@ function initAudio() {
   setTimeout(noiseWash, 5000);
 }
 
-// ── Mute toggle ─────────────────────────────────────────────────────────
+// ── Volume UI ───────────────────────────────────────────────────────────
+const speakerBtn = document.getElementById('speaker-btn');
+const iconOn = document.getElementById('icon-on');
+const iconOff = document.getElementById('icon-off');
+const volumeSlider = document.getElementById('volume-slider');
+let savedVolume = 60;
+
+function updateIcons() {
+  iconOn.style.display = muted ? 'none' : 'block';
+  iconOff.style.display = muted ? 'block' : 'none';
+}
+
+function setVolume(val, fromSlider) {
+  if (!masterGain) return;
+  const v = val / 100 * 0.6; // map 0-100 to 0-0.6
+  masterGain.gain.linearRampToValueAtTime(v, audioCtx.currentTime + 0.1);
+  if (!fromSlider) volumeSlider.value = val;
+  muted = val === 0;
+  updateIcons();
+}
+
+speakerBtn.addEventListener('click', () => {
+  if (muted) {
+    // Unmute: restore saved volume
+    const restore = savedVolume > 0 ? savedVolume : 60;
+    volumeSlider.value = restore;
+    setVolume(restore, false);
+  } else {
+    // Mute: save current volume, set to 0
+    savedVolume = parseInt(volumeSlider.value);
+    volumeSlider.value = 0;
+    setVolume(0, false);
+  }
+});
+
+volumeSlider.addEventListener('input', () => {
+  const val = parseInt(volumeSlider.value);
+  if (val > 0) savedVolume = val;
+  setVolume(val, true);
+});
+
+// Keyboard shortcut still works
 window.addEventListener('keydown', (e) => {
   if (e.key === 'm' || e.key === 'M') {
-    muted = !muted;
-    if (masterGain) {
-      masterGain.gain.linearRampToValueAtTime(
-        muted ? 0 : 0.6, audioCtx.currentTime + 0.3
-      );
-    }
+    speakerBtn.click();
   }
 });
 

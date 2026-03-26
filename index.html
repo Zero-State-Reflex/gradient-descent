@@ -8,10 +8,6 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { overflow: hidden; background: #000; font-family: 'SF Mono', 'Fira Code', monospace; }
     canvas { display: block; }
-    #overlay {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      pointer-events: none; z-index: 10;
-    }
     #title {
       position: fixed; top: 32px; left: 50%; transform: translateX(-50%);
       color: rgba(255,255,255,0.85); font-size: 14px; letter-spacing: 6px;
@@ -22,18 +18,72 @@
       position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
       color: rgba(255,255,255,0.5); font-size: 11px; letter-spacing: 3px;
       text-transform: uppercase; z-index: 20; pointer-events: none;
+      white-space: nowrap;
     }
     #stats {
       position: fixed; top: 32px; right: 32px;
       color: rgba(100,200,255,0.7); font-size: 11px; letter-spacing: 2px;
       z-index: 20; pointer-events: none; text-align: right; line-height: 1.8;
     }
+
+    /* ── Volume control ─────────────────────────────────── */
+    #volume-control {
+      position: fixed; bottom: 28px; right: 28px; z-index: 30;
+      display: flex; align-items: center; gap: 10px;
+    }
+    #speaker-btn {
+      background: none; border: none; cursor: pointer; padding: 4px;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0.6; transition: opacity 0.2s;
+    }
+    #speaker-btn:hover { opacity: 1; }
+    #speaker-btn svg { width: 20px; height: 20px; fill: rgba(100,200,255,0.9); }
+
+    #volume-slider {
+      -webkit-appearance: none; appearance: none;
+      width: 90px; height: 3px; border-radius: 2px;
+      background: rgba(100,200,255,0.15); outline: none;
+      cursor: pointer;
+    }
+    #volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 12px; height: 12px; border-radius: 50%;
+      background: rgba(100,200,255,0.8);
+      box-shadow: 0 0 8px rgba(100,200,255,0.4);
+      cursor: pointer; transition: transform 0.15s;
+    }
+    #volume-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.3);
+    }
+    #volume-slider::-moz-range-thumb {
+      width: 12px; height: 12px; border-radius: 50%; border: none;
+      background: rgba(100,200,255,0.8);
+      box-shadow: 0 0 8px rgba(100,200,255,0.4);
+      cursor: pointer;
+    }
+    #volume-slider::-moz-range-track {
+      height: 3px; border-radius: 2px;
+      background: rgba(100,200,255,0.15);
+    }
   </style>
 </head>
 <body>
   <div id="title">Gradient Descent</div>
   <div id="stats"></div>
-  <div id="info">drag to rotate &middot; scroll to zoom &middot; double-click to restart &middot; M to mute</div>
+  <div id="info">drag to rotate &middot; scroll to zoom &middot; double-click to restart</div>
+
+  <div id="volume-control">
+    <button id="speaker-btn" title="Toggle mute">
+      <svg id="icon-on" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+      </svg>
+      <svg id="icon-off" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="display:none">
+        <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+      </svg>
+    </button>
+    <input type="range" id="volume-slider" min="0" max="100" value="60" />
+  </div>
+
   <div id="sound-prompt" style="position:fixed;top:0;left:0;width:100%;height:100%;
     background:rgba(0,5,16,0.92);display:flex;align-items:center;justify-content:center;
     z-index:100;cursor:pointer;flex-direction:column;gap:16px;">
