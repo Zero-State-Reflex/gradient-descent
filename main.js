@@ -523,16 +523,15 @@ function initAudio() {
   masterGain.connect(dryGain).connect(audioCtx.destination);
   masterGain.connect(convolver).connect(reverbGain).connect(audioCtx.destination);
 
-  // ── Deep drone: sub bass + tritone interval ───────────────────────
-  // Root A1 (55Hz) + Tritone Eb2 (77.78Hz) — the devil's interval
+  // ── Deep drone: root + fifth + octave (consonant, warm) ────────────
   const droneFreqs = [
-    { f: 36.71, type: 'sine', vol: 0.05 },     // D1 sub
-    { f: 55, type: 'sine', vol: 0.04 },         // A1
-    { f: 55 * 1.002, type: 'sine', vol: 0.035 }, // A1 detuned
-    { f: 77.78, type: 'triangle', vol: 0.02 },  // Eb2 (tritone of A)
-    { f: 77.78 * 0.997, type: 'sine', vol: 0.018 }, // Eb2 detuned
-    { f: 110, type: 'sine', vol: 0.015 },       // A2 octave
-    { f: 155.56, type: 'sine', vol: 0.008 },    // Eb3 tritone octave
+    { f: 55, type: 'sine', vol: 0.045 },         // A1 root
+    { f: 55 * 1.002, type: 'sine', vol: 0.035 }, // A1 detuned chorus
+    { f: 82.41, type: 'sine', vol: 0.025 },      // E2 perfect fifth
+    { f: 82.41 * 0.998, type: 'sine', vol: 0.02 }, // E2 detuned
+    { f: 110, type: 'triangle', vol: 0.018 },    // A2 octave
+    { f: 110 * 1.003, type: 'sine', vol: 0.012 }, // A2 detuned
+    { f: 164.81, type: 'sine', vol: 0.008 },     // E3 fifth octave
   ];
 
   droneFreqs.forEach((d, i) => {
@@ -571,110 +570,129 @@ function initAudio() {
   });
 
   // ── Deep synth note player ────────────────────────────────────────
-  // Plays a soft, long note with saw+sine layers through heavy filtering
+  // Warm, soft voice: sine + triangle layers, gentle filtering
   function playSynthNote(freq, time, duration, vel) {
     const now = audioCtx.currentTime + time;
-    const attack = Math.min(duration * 0.35, 4);
-    const release = Math.min(duration * 0.45, 6);
+    const attack = Math.min(duration * 0.4, 5);
+    const release = Math.min(duration * 0.5, 7);
 
-    // Layer 1: filtered sawtooth (main body)
-    const saw = audioCtx.createOscillator();
-    saw.type = 'sawtooth';
-    saw.frequency.value = freq;
+    // Layer 1: warm triangle (main body, softer than saw)
+    const tri1 = audioCtx.createOscillator();
+    tri1.type = 'triangle';
+    tri1.frequency.value = freq;
 
-    // Layer 2: sine an octave below
+    // Layer 2: sine for purity
+    const sine = audioCtx.createOscillator();
+    sine.type = 'sine';
+    sine.frequency.value = freq;
+
+    // Layer 3: detuned sine for gentle chorus
+    const sine2 = audioCtx.createOscillator();
+    sine2.type = 'sine';
+    sine2.frequency.value = freq * 1.004;
+
+    // Layer 4: sub octave sine
     const sub = audioCtx.createOscillator();
     sub.type = 'sine';
     sub.frequency.value = freq * 0.5;
 
-    // Layer 3: detuned triangle for width
-    const tri = audioCtx.createOscillator();
-    tri.type = 'triangle';
-    tri.frequency.value = freq * 1.003;
-
-    const sawGain = audioCtx.createGain();
-    const amp = 0.018 * vel;
-    sawGain.gain.setValueAtTime(0, now);
-    sawGain.gain.linearRampToValueAtTime(amp, now + attack);
-    sawGain.gain.setValueAtTime(amp, now + duration - release);
-    sawGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-
-    const subGain = audioCtx.createGain();
-    subGain.gain.setValueAtTime(0, now);
-    subGain.gain.linearRampToValueAtTime(amp * 0.6, now + attack);
-    subGain.gain.setValueAtTime(amp * 0.6, now + duration - release);
-    subGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    const amp = 0.016 * vel;
 
     const triGain = audioCtx.createGain();
     triGain.gain.setValueAtTime(0, now);
-    triGain.gain.linearRampToValueAtTime(amp * 0.3, now + attack);
-    triGain.gain.setValueAtTime(amp * 0.3, now + duration - release);
+    triGain.gain.linearRampToValueAtTime(amp * 0.5, now + attack);
+    triGain.gain.setValueAtTime(amp * 0.5, now + duration - release);
     triGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
-    // Low-pass filter with slow sweep
+    const sineGain = audioCtx.createGain();
+    sineGain.gain.setValueAtTime(0, now);
+    sineGain.gain.linearRampToValueAtTime(amp, now + attack);
+    sineGain.gain.setValueAtTime(amp, now + duration - release);
+    sineGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    const sine2Gain = audioCtx.createGain();
+    sine2Gain.gain.setValueAtTime(0, now);
+    sine2Gain.gain.linearRampToValueAtTime(amp * 0.4, now + attack);
+    sine2Gain.gain.setValueAtTime(amp * 0.4, now + duration - release);
+    sine2Gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    const subGain = audioCtx.createGain();
+    subGain.gain.setValueAtTime(0, now);
+    subGain.gain.linearRampToValueAtTime(amp * 0.5, now + attack);
+    subGain.gain.setValueAtTime(amp * 0.5, now + duration - release);
+    subGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    // Gentle low-pass filter — warm, no resonance
     const filter = audioCtx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.Q.value = 3;
-    filter.frequency.setValueAtTime(100, now);
-    filter.frequency.linearRampToValueAtTime(600 + freq * 0.8, now + attack * 1.5);
-    filter.frequency.linearRampToValueAtTime(150, now + duration);
+    filter.Q.value = 0.7;
+    filter.frequency.setValueAtTime(120, now);
+    filter.frequency.linearRampToValueAtTime(500 + freq * 1.2, now + attack * 1.2);
+    filter.frequency.linearRampToValueAtTime(200, now + duration);
 
     const mix = audioCtx.createGain();
-    saw.connect(sawGain).connect(mix);
+    tri1.connect(triGain).connect(mix);
+    sine.connect(sineGain).connect(mix);
+    sine2.connect(sine2Gain).connect(mix);
     sub.connect(subGain).connect(mix);
-    tri.connect(triGain).connect(mix);
     mix.connect(filter).connect(masterGain);
 
-    saw.start(now);
+    tri1.start(now);
+    sine.start(now);
+    sine2.start(now);
     sub.start(now);
-    tri.start(now);
-    saw.stop(now + duration + 1);
+    tri1.stop(now + duration + 1);
+    sine.stop(now + duration + 1);
+    sine2.stop(now + duration + 1);
     sub.stop(now + duration + 1);
-    tri.stop(now + duration + 1);
   }
 
-  // ── Tritone pad progression ───────────────────────────────────────
-  // Dark chords built on tritone intervals (augmented fourths)
-  // A-Eb, D-Ab, E-Bb, Bb-E — all tritone pairs
-  const darkChords = [
-    [55, 77.78, 110, 155.56],         // A1 + Eb2 + A2 + Eb3
-    [73.42, 103.83, 146.83, 207.65],  // D2 + Ab2 + D3 + Ab3
-    [82.41, 116.54, 164.81],          // E2 + Bb2 + E3
-    [58.27, 82.41, 116.54, 164.81],   // Bb1 + E2 + Bb2 + E3
+  // ── Warm pad progression ─────────────────────────────────────────
+  // Consonant chords: Am - Fmaj7 - Cmaj - Em7 - Dm9 - Am
+  const warmChords = [
+    [55, 65.41, 82.41, 110],           // Am: A1 + C2 + E2 + A2
+    [43.65, 55, 65.41, 82.41],         // Fmaj7: F1 + A1 + C2 + E2
+    [65.41, 82.41, 98, 130.81],        // C: C2 + E2 + G2 + C3
+    [82.41, 98, 123.47, 146.83],       // Em7: E2 + G2 + B2 + D3
+    [73.42, 87.31, 110, 130.81],       // Dm9: D2 + F2 + A2 + C3
+    [55, 65.41, 82.41, 130.81],        // Am(add9): A1 + C2 + E2 + C3
   ];
 
   function schedulePads() {
-    const cycleDuration = 48; // longer, more meditative
-    const chordDur = cycleDuration / darkChords.length;
-    darkChords.forEach((chord, i) => {
+    const cycleDuration = 60; // long, meditative
+    const chordDur = cycleDuration / warmChords.length;
+    warmChords.forEach((chord, i) => {
       chord.forEach(freq => {
-        playSynthNote(freq, i * chordDur, chordDur * 1.4, 0.7 + Math.random() * 0.3);
+        playSynthNote(freq, i * chordDur, chordDur * 1.5, 0.6 + Math.random() * 0.3);
       });
     });
     setTimeout(schedulePads, cycleDuration * 1000);
   }
   schedulePads();
 
-  // ── Soft melodic notes: slow, sparse, deep, reverbed ──────────────
-  // Tritone-based scale: A, Bb, D, Eb, E — dark and unresolved
-  const deepScale = [55, 58.27, 73.42, 77.78, 82.41, 110, 116.54, 146.83, 155.56, 164.81];
+  // ── Soft melodic notes: pentatonic minor (always consonant) ────────
+  // A minor pentatonic across two octaves — every combination sounds good
+  const deepScale = [
+    55, 65.41, 73.42, 82.41, 98,       // A1 C2 D2 E2 G2
+    110, 130.81, 146.83, 164.81, 196,   // A2 C3 D3 E3 G3
+  ];
 
   function scheduleDeepNote() {
-    const interval = 4 + Math.random() * 8; // sparse: 4-12 seconds apart
+    const interval = 5 + Math.random() * 8;
     if (particles.length > 0 && !muted) {
       const p = particles[Math.floor(Math.random() * particles.length)];
       const normalizedLoss = Math.max(0, Math.min(1, (p.y - yMin) / (yMax - yMin)));
-      // Lower loss = lower pitch
       const noteIdx = Math.floor((1 - normalizedLoss) * (deepScale.length - 1));
       const freq = deepScale[noteIdx];
-      const duration = 6 + Math.random() * 10; // 6-16 second notes
-      const vel = 0.3 + (1 - normalizedLoss) * 0.5;
+      const duration = 8 + Math.random() * 12; // 8-20 second notes
+      const vel = 0.25 + (1 - normalizedLoss) * 0.45;
       playSynthNote(freq, 0, duration, vel);
 
-      // Sometimes add tritone harmony
-      if (Math.random() > 0.6) {
-        const tritoneFreq = freq * Math.SQRT2; // tritone = freq * sqrt(2)
-        playSynthNote(tritoneFreq, 0.5 + Math.random() * 2, duration * 0.8, vel * 0.4);
+      // Sometimes add a perfect fifth or octave harmony
+      if (Math.random() > 0.55) {
+        const harmonyOptions = [1.5, 2.0, 1.333]; // fifth, octave, fourth
+        const ratio = harmonyOptions[Math.floor(Math.random() * harmonyOptions.length)];
+        playSynthNote(freq * ratio, 1 + Math.random() * 3, duration * 0.7, vel * 0.35);
       }
     }
     setTimeout(scheduleDeepNote, interval * 1000);
