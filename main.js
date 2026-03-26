@@ -512,7 +512,7 @@ let audioCtx, masterGain, muted = false;
 function initAudio() {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = 0.55;
+  masterGain.gain.value = 0.72;
 
   // ── Long reverb (6 seconds) ───────────────────────────────────────
   const convolver = audioCtx.createConvolver();
@@ -536,15 +536,19 @@ function initAudio() {
   masterGain.connect(dryGain).connect(audioCtx.destination);
   masterGain.connect(convolver).connect(reverbGain).connect(audioCtx.destination);
 
-  // ── Deep drone: root + fifth + octave (consonant, warm) ────────────
+  // ── Deep drone: root + fifth + octave + higher harmonics ────────────
   const droneFreqs = [
-    { f: 55, type: 'sine', vol: 0.045 },         // A1 root
-    { f: 55 * 1.002, type: 'sine', vol: 0.035 }, // A1 detuned chorus
-    { f: 82.41, type: 'sine', vol: 0.025 },      // E2 perfect fifth
-    { f: 82.41 * 0.998, type: 'sine', vol: 0.02 }, // E2 detuned
-    { f: 110, type: 'triangle', vol: 0.018 },    // A2 octave
-    { f: 110 * 1.003, type: 'sine', vol: 0.012 }, // A2 detuned
-    { f: 164.81, type: 'sine', vol: 0.008 },     // E3 fifth octave
+    { f: 55, type: 'sine', vol: 0.055 },         // A1 root
+    { f: 55 * 1.002, type: 'sine', vol: 0.045 }, // A1 detuned chorus
+    { f: 82.41, type: 'sine', vol: 0.035 },      // E2 perfect fifth
+    { f: 82.41 * 0.998, type: 'sine', vol: 0.028 }, // E2 detuned
+    { f: 110, type: 'triangle', vol: 0.03 },     // A2 octave
+    { f: 110 * 1.003, type: 'sine', vol: 0.022 }, // A2 detuned
+    { f: 164.81, type: 'sine', vol: 0.018 },     // E3 fifth octave
+    { f: 220, type: 'sine', vol: 0.012 },        // A3 second octave
+    { f: 220 * 1.005, type: 'triangle', vol: 0.008 }, // A3 detuned shimmer
+    { f: 329.63, type: 'sine', vol: 0.006 },     // E4 high fifth
+    { f: 440, type: 'sine', vol: 0.004 },        // A4 air
   ];
 
   droneFreqs.forEach((d, i) => {
@@ -609,7 +613,7 @@ function initAudio() {
     sub.type = 'sine';
     sub.frequency.value = freq * 0.5;
 
-    const amp = 0.016 * vel;
+    const amp = 0.022 * vel;
 
     const triGain = audioCtx.createGain();
     triGain.gain.setValueAtTime(0, now);
@@ -784,7 +788,7 @@ function updateIcons() {
 
 function setVolume(val, fromSlider) {
   if (!masterGain) return;
-  const v = val / 100 * 0.6; // map 0-100 to 0-0.6
+  const v = val / 100 * 0.72; // map 0-100 to 0-0.72
   masterGain.gain.linearRampToValueAtTime(v, audioCtx.currentTime + 0.1);
   if (!fromSlider) volumeSlider.value = val;
   muted = val === 0;
