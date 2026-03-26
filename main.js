@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -37,6 +38,18 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
 document.body.appendChild(renderer.domElement);
+
+// ── Orbit Controls ──────────────────────────────────────────────────────
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.5;
+controls.target.set(0, 1, 0);
+controls.minDistance = 4;
+controls.maxDistance = 30;
+controls.maxPolarAngle = Math.PI * 0.85;
+controls.update();
 
 // ── Post-processing ─────────────────────────────────────────────────────
 const composer = new EffectComposer(renderer);
@@ -232,6 +245,32 @@ const underLight = new THREE.PointLight(0x2211aa, 1.0, 15);
 underLight.position.set(0, yMin - 1, 0);
 scene.add(underLight);
 
+// ── Trail shader material (fading points) ───────────────────────────────
+const trailVertexShader = `
+  attribute float alpha;
+  attribute float size;
+  varying float vAlpha;
+  void main() {
+    vAlpha = alpha;
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = size * (200.0 / -mvPosition.z);
+    gl_Position = projectionMatrix * mvPosition;
+  }
+`;
+
+const trailFragmentShader = `
+  uniform vec3 color;
+  varying float vAlpha;
+  void main() {
+    float d = length(gl_PointCoord - vec2(0.5));
+    if (d > 0.5) discard;
+    float glow = smoothstep(0.5, 0.0, d);
+    float core = smoothstep(0.2, 0.0, d);
+    vec3 col = color * glow + vec3(1.0) * core * 0.3;
+    gl_FragColor = vec4(col, vAlpha * glow);
+  }
+`;
+
 // ── Particle system (gradient descent balls) ────────────────────────────
 const particleColors = [0xff4466, 0x44ff88, 0x4488ff, 0xffaa22, 0xcc44ff, 0x44ffee];
 
@@ -247,29 +286,42 @@ class DescentParticle {
     this.converged = false;
     this.color = color;
 
-    const geo = new THREE.SphereGeometry(0.08, 32, 32);
+    // Glowing sphere
+    const geo = new THREE.SphereGeometry(0.1, 32, 32);
     const mat = new THREE.MeshStandardMaterial({
       color,
       emissive: color,
-      emissiveIntensity: 2,
+      emissiveIntensity: 2.5,
       metalness: 0.8,
       roughness: 0.1,
     });
     this.mesh = new THREE.Mesh(geo, mat);
     scene.add(this.mesh);
 
-    this.light = new THREE.PointLight(color, 1.5, 3);
+    this.light = new THREE.PointLight(color, 2.0, 4);
     scene.add(this.light);
 
+    // Fading trail using custom shader points
     this.trailPositions = [];
-    const trailGeo = new THREE.BufferGeometry();
-    const trailMat = new THREE.LineBasicMaterial({
-      color,
+    this.trailGeo = new THREE.BufferGeometry();
+    const posArr = new Float32Array(TRAIL_LENGTH * 3);
+    const alphaArr = new Float32Array(TRAIL_LENGTH);
+    const sizeArr = new Float32Array(TRAIL_LENGTH);
+    this.trailGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+    this.trailGeo.setAttribute('alpha', new THREE.BufferAttribute(alphaArr, 1));
+    this.trailGeo.setAttribute('size', new THREE.BufferAttribute(sizeArr, 1));
+    this.trailGeo.setDrawRange(0, 0);
+
+    const c = new THREE.Color(color);
+    this.trailMat = new THREE.ShaderMaterial({
+      uniforms: { color: { value: c } },
+      vertexShader: trailVertexShader,
+      fragmentShader: trailFragmentShader,
       transparent: true,
-      opacity: 0.6,
-      linewidth: 2,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
     });
-    this.trail = new THREE.Line(trailGeo, trailMat);
+    this.trail = new THREE.Points(this.trailGeo, this.trailMat);
     scene.add(this.trail);
   }
 
@@ -298,29 +350,48 @@ class DescentParticle {
       this.converged = true;
     }
 
-    this.trailPositions.push(new THREE.Vector3(this.x, this.y + 0.05, this.z));
+    this.trailPositions.push({ x: this.x, y: this.y + 0.06, z: this.z });
     if (this.trailPositions.length > TRAIL_LENGTH) {
       this.trailPositions.shift();
     }
   }
 
   updateVisuals() {
-    this.mesh.position.set(this.x, this.y + 0.12, this.z);
+    this.mesh.position.set(this.x, this.y + 0.14, this.z);
     this.light.position.copy(this.mesh.position);
     this.light.position.y += 0.3;
 
-    const pulse = 1 + 0.15 * Math.sin(performance.now() * 0.005 + this.x);
+    const pulse = 1 + 0.2 * Math.sin(performance.now() * 0.005 + this.x);
     this.mesh.scale.setScalar(pulse);
-    this.light.intensity = 1.0 + 0.5 * pulse;
+    this.light.intensity = 1.5 + 0.8 * pulse;
 
     const speed = Math.sqrt(this.vx ** 2 + this.vz ** 2);
-    this.mesh.material.emissiveIntensity = 1.5 + speed * 20;
+    this.mesh.material.emissiveIntensity = 2.0 + speed * 25;
 
-    if (this.trailPositions.length > 1) {
-      const geo = new THREE.BufferGeometry().setFromPoints(this.trailPositions);
-      this.trail.geometry.dispose();
-      this.trail.geometry = geo;
+    // Update trail buffer
+    const count = this.trailPositions.length;
+    const posAttr = this.trailGeo.attributes.position;
+    const alphaAttr = this.trailGeo.attributes.alpha;
+    const sizeAttr = this.trailGeo.attributes.size;
+
+    for (let i = 0; i < count; i++) {
+      const p = this.trailPositions[i];
+      posAttr.array[i * 3] = p.x;
+      posAttr.array[i * 3 + 1] = p.y;
+      posAttr.array[i * 3 + 2] = p.z;
+
+      // Fade: 0 at tail, 1 at head
+      const t = i / Math.max(1, count - 1);
+      // Exponential fade for more visible recent trail
+      alphaAttr.array[i] = Math.pow(t, 1.5) * 0.9;
+      // Size: smaller at tail, bigger near head
+      sizeAttr.array[i] = 0.5 + t * 3.5;
     }
+
+    posAttr.needsUpdate = true;
+    alphaAttr.needsUpdate = true;
+    sizeAttr.needsUpdate = true;
+    this.trailGeo.setDrawRange(0, count);
   }
 
   reset(startX, startZ) {
@@ -332,6 +403,7 @@ class DescentParticle {
     this.iteration = 0;
     this.converged = false;
     this.trailPositions = [];
+    this.trailGeo.setDrawRange(0, 0);
   }
 }
 
@@ -345,8 +417,8 @@ function spawnParticles() {
     scene.remove(p.trail);
     p.mesh.geometry.dispose();
     p.mesh.material.dispose();
-    p.trail.geometry.dispose();
-    p.trail.material.dispose();
+    p.trailGeo.dispose();
+    p.trailMat.dispose();
   });
   particles = [];
 
@@ -726,18 +798,8 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// ── Camera controls ─────────────────────────────────────────────────────
-let cameraAngle = 0.6;
-let cameraHeight = 7;
-let cameraDistance = 12;
-let targetDistance = 12;
-
-window.addEventListener('wheel', (e) => {
-  targetDistance += e.deltaY * 0.01;
-  targetDistance = Math.max(5, Math.min(25, targetDistance));
-});
-
-window.addEventListener('click', (e) => {
+// ── Restart on double-click (single click is now orbit) ─────────────────
+window.addEventListener('dblclick', (e) => {
   if (e.target === soundPrompt || soundPrompt.contains(e.target)) return;
   spawnParticles();
 });
@@ -784,16 +846,8 @@ function animate() {
   }
   particles.forEach(p => p.updateVisuals());
 
-  // Camera orbit
-  cameraAngle += dt * 0.08;
-  cameraDistance += (targetDistance - cameraDistance) * 0.05;
-  const camY = cameraHeight + Math.sin(t * 0.15) * 1.5;
-  camera.position.set(
-    Math.cos(cameraAngle) * cameraDistance,
-    camY,
-    Math.sin(cameraAngle) * cameraDistance
-  );
-  camera.lookAt(0, 1, 0);
+  // OrbitControls update
+  controls.update();
 
   // Animate dust
   const dPos = dust.geometry.attributes.position;
