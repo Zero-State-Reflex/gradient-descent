@@ -853,6 +853,189 @@ function updateStats() {
   `;
 }
 
+// ── Model insight panel ─────────────────────────────────────────────────
+const nnCanvas = document.getElementById('nn-canvas');
+const nnCtx = nnCanvas ? nnCanvas.getContext('2d') : null;
+const mLoss = document.getElementById('m-loss');
+const mLr = document.getElementById('m-lr');
+const mGrad = document.getElementById('m-grad');
+const mWeight = document.getElementById('m-weight');
+const mConf = document.getElementById('m-conf');
+const confBar = document.getElementById('confidence-bar');
+const mPhase = document.getElementById('model-phase');
+const mNarrative = document.getElementById('model-narrative');
+
+// Neural network layout: 3 layers
+const nnLayers = [4, 6, 3]; // input, hidden, output
+const nnWeights = []; // will store animated weight values
+
+// Initialize random weights
+for (let l = 0; l < nnLayers.length - 1; l++) {
+  const layerWeights = [];
+  for (let i = 0; i < nnLayers[l]; i++) {
+    for (let j = 0; j < nnLayers[l + 1]; j++) {
+      layerWeights.push(Math.random() * 2 - 1);
+    }
+  }
+  nnWeights.push(layerWeights);
+}
+
+function drawNeuralNetwork(t, p) {
+  if (!nnCtx) return;
+  const W = nnCanvas.width;
+  const H = nnCanvas.height;
+  nnCtx.clearRect(0, 0, W, H);
+
+  const normalizedLoss = p ? Math.max(0, Math.min(1, (p.y - yMin) / (yMax - yMin))) : 1;
+  const confidence = 1 - normalizedLoss;
+  const speed = p ? Math.sqrt(p.vx ** 2 + p.vz ** 2) : 0;
+
+  // Node positions
+  const layerX = nnLayers.map((_, i) => 60 + i * (W - 120) / (nnLayers.length - 1));
+  const nodePositions = [];
+
+  for (let l = 0; l < nnLayers.length; l++) {
+    const nodes = [];
+    const count = nnLayers[l];
+    for (let n = 0; n < count; n++) {
+      const y = (H / (count + 1)) * (n + 1);
+      nodes.push({ x: layerX[l], y });
+    }
+    nodePositions.push(nodes);
+  }
+
+  // Update weights based on particle state
+  if (p && !p.converged) {
+    for (let l = 0; l < nnWeights.length; l++) {
+      for (let w = 0; w < nnWeights[l].length; w++) {
+        // Weights drift toward stability as loss decreases
+        nnWeights[l][w] += (Math.random() - 0.5) * speed * 8;
+        nnWeights[l][w] *= 0.995; // slow decay toward 0
+        nnWeights[l][w] = Math.max(-1, Math.min(1, nnWeights[l][w]));
+      }
+    }
+  }
+
+  // Draw connections with weight-based coloring
+  for (let l = 0; l < nnLayers.length - 1; l++) {
+    let wIdx = 0;
+    for (let i = 0; i < nnLayers[l]; i++) {
+      for (let j = 0; j < nnLayers[l + 1]; j++) {
+        const from = nodePositions[l][i];
+        const to = nodePositions[l + 1][j];
+        const w = nnWeights[l][wIdx++];
+
+        // Color: positive = cyan, negative = red-ish, alpha by magnitude
+        const mag = Math.abs(w);
+        const alpha = 0.08 + mag * 0.35;
+        if (w >= 0) {
+          nnCtx.strokeStyle = `rgba(100,200,255,${alpha})`;
+        } else {
+          nnCtx.strokeStyle = `rgba(255,100,100,${alpha})`;
+        }
+        nnCtx.lineWidth = 0.5 + mag * 2;
+        nnCtx.beginPath();
+        nnCtx.moveTo(from.x, from.y);
+        nnCtx.lineTo(to.x, to.y);
+        nnCtx.stroke();
+      }
+    }
+  }
+
+  // Draw nodes
+  for (let l = 0; l < nnLayers.length; l++) {
+    for (let n = 0; n < nodePositions[l].length; n++) {
+      const { x, y } = nodePositions[l][n];
+
+      // Activation: output layer glows with confidence, others pulse
+      let activation;
+      if (l === nnLayers.length - 1) {
+        // Output layer: brightest node = model's "choice"
+        activation = (n === 0) ? confidence : (1 - confidence) * 0.3;
+      } else {
+        activation = 0.3 + 0.4 * Math.sin(t * 2 + l * 1.5 + n * 0.8) + confidence * 0.3;
+      }
+
+      // Glow
+      const grd = nnCtx.createRadialGradient(x, y, 0, x, y, 14);
+      grd.addColorStop(0, `rgba(100,200,255,${activation * 0.4})`);
+      grd.addColorStop(1, 'rgba(100,200,255,0)');
+      nnCtx.fillStyle = grd;
+      nnCtx.beginPath();
+      nnCtx.arc(x, y, 14, 0, Math.PI * 2);
+      nnCtx.fill();
+
+      // Core
+      nnCtx.fillStyle = `rgba(100,200,255,${0.3 + activation * 0.7})`;
+      nnCtx.beginPath();
+      nnCtx.arc(x, y, 4, 0, Math.PI * 2);
+      nnCtx.fill();
+
+      // Bright center for high activation
+      if (activation > 0.6) {
+        nnCtx.fillStyle = `rgba(255,255,255,${(activation - 0.6) * 1.5})`;
+        nnCtx.beginPath();
+        nnCtx.arc(x, y, 2, 0, Math.PI * 2);
+        nnCtx.fill();
+      }
+    }
+  }
+
+  // Layer labels
+  nnCtx.font = '16px SF Mono, Fira Code, monospace';
+  nnCtx.fillStyle = 'rgba(255,255,255,0.15)';
+  nnCtx.textAlign = 'center';
+  const labels = ['input', 'hidden', 'output'];
+  for (let l = 0; l < nnLayers.length; l++) {
+    nnCtx.fillText(labels[l], layerX[l], H - 8);
+  }
+}
+
+function updateModelPanel(t) {
+  const p = particles[0];
+  if (!p) return;
+
+  const [gx, gz] = gradient(p.x, p.z);
+  const gradMag = Math.sqrt(gx * gx + gz * gz);
+  const normalizedLoss = Math.max(0, Math.min(1, (p.y - yMin) / (yMax - yMin)));
+  const confidence = ((1 - normalizedLoss) * 100);
+  const speed = Math.sqrt(p.vx ** 2 + p.vz ** 2);
+  const weightUpdate = speed * LEARNING_RATE;
+
+  // Update values
+  if (mLoss) mLoss.textContent = p.y.toFixed(4);
+  if (mLr) mLr.textContent = LEARNING_RATE.toFixed(3);
+  if (mGrad) mGrad.textContent = gradMag.toFixed(4);
+  if (mWeight) mWeight.textContent = (weightUpdate > 0.0001 ? weightUpdate.toFixed(6) : '~0');
+  if (mConf) mConf.textContent = confidence.toFixed(1) + '%';
+  if (confBar) confBar.style.width = confidence + '%';
+
+  // Phase and narrative
+  let phase, narrative;
+  if (p.converged) {
+    phase = '<span style="color:#44ff88">converged</span>';
+    narrative = 'The model has settled into a minimum. Weights are stable — the network has found a configuration where its predictions minimize error. This is what a trained model looks like.';
+  } else if (gradMag > 2) {
+    phase = '<span style="color:#ff6644">exploring</span>';
+    narrative = 'The gradient is steep — the model is far from optimal. Large weight updates are pushing it rapidly downhill. Each step dramatically changes what the network predicts.';
+  } else if (gradMag > 0.5) {
+    phase = '<span style="color:#ffaa44">descending</span>';
+    narrative = 'The model is making steady progress. The slope is clear and the weights adjust with each step, gradually improving predictions as error decreases.';
+  } else if (gradMag > 0.1) {
+    phase = '<span style="color:#44aaff">refining</span>';
+    narrative = 'Near a valley now. The gradient is small — weight updates are fine-grained. The model is tuning its parameters with precision, like focusing a lens.';
+  } else {
+    phase = '<span style="color:#88ddff">settling</span>';
+    narrative = 'Almost flat terrain. The model is oscillating near a minimum, making tiny adjustments. Momentum may carry it past — or it may settle here.';
+  }
+
+  if (mPhase) mPhase.innerHTML = phase;
+  if (mNarrative) mNarrative.textContent = narrative;
+
+  // Draw neural network
+  drawNeuralNetwork(t, p);
+}
+
 // ── Animation loop ──────────────────────────────────────────────────────
 const clock = new THREE.Clock();
 let stepAccumulator = 0;
@@ -890,6 +1073,7 @@ function animate() {
   bloom.strength = 1.3 + 0.3 * Math.sin(t * 0.5);
 
   updateStats();
+  updateModelPanel(t);
   composer.render();
 }
 

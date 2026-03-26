@@ -89,11 +89,81 @@
       height: 3px; border-radius: 2px;
       background: rgba(100,200,255,0.15);
     }
+    /* ── Model insight panel ────────────────────────────── */
+    #model-panel {
+      position: fixed; top: 80px; left: 24px; z-index: 20;
+      width: 220px; pointer-events: none;
+      font-size: 10px; color: rgba(255,255,255,0.5);
+      letter-spacing: 1px;
+    }
+    #model-panel .panel-title {
+      font-size: 9px; letter-spacing: 3px; text-transform: uppercase;
+      color: rgba(100,200,255,0.5); margin-bottom: 12px;
+    }
+    #nn-canvas {
+      width: 220px; height: 140px; display: block;
+      margin-bottom: 12px; border-radius: 4px;
+      background: rgba(0,5,20,0.4);
+    }
+    .model-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 3px 0; border-bottom: 1px solid rgba(100,200,255,0.06);
+    }
+    .model-label { color: rgba(255,255,255,0.35); }
+    .model-value { color: rgba(100,200,255,0.7); font-variant-numeric: tabular-nums; }
+    #confidence-bar-bg {
+      margin-top: 10px; height: 4px; border-radius: 2px;
+      background: rgba(100,200,255,0.08);
+    }
+    #confidence-bar {
+      height: 100%; border-radius: 2px; width: 0%;
+      background: linear-gradient(90deg, rgba(100,200,255,0.3), rgba(68,255,136,0.7));
+      transition: width 0.3s ease;
+    }
+    #model-narrative {
+      margin-top: 10px; font-size: 9px; line-height: 1.6;
+      color: rgba(255,255,255,0.3); font-style: italic;
+    }
+    #model-phase {
+      margin-top: 8px; font-size: 9px; letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    @media (max-width: 768px) {
+      #model-panel { display: none; }
+    }
   </style>
 </head>
 <body>
   <div id="title">Gradient Descent</div>
   <div id="stats"></div>
+
+  <div id="model-panel">
+    <div class="panel-title">What the model sees</div>
+    <canvas id="nn-canvas" width="440" height="280"></canvas>
+    <div class="model-row">
+      <span class="model-label">loss (error)</span>
+      <span class="model-value" id="m-loss">—</span>
+    </div>
+    <div class="model-row">
+      <span class="model-label">learning rate</span>
+      <span class="model-value" id="m-lr">—</span>
+    </div>
+    <div class="model-row">
+      <span class="model-label">gradient magnitude</span>
+      <span class="model-value" id="m-grad">—</span>
+    </div>
+    <div class="model-row">
+      <span class="model-label">weight update</span>
+      <span class="model-value" id="m-weight">—</span>
+    </div>
+    <div class="model-row">
+      <span class="model-label">confidence</span>
+      <span class="model-value" id="m-conf">—</span>
+    </div>
+    <div id="confidence-bar-bg"><div id="confidence-bar"></div></div>
+    <div id="model-phase"></div>
+    <div id="model-narrative"></div>
+  </div>
 
   <div id="bottom-center">
     <div id="branding">
