@@ -217,9 +217,22 @@ const keyLight = new THREE.DirectionalLight(0x88bbff, 2.0);
 keyLight.position.set(5, 10, 5);
 scene.add(keyLight);
 
-const rimLight = new THREE.DirectionalLight(0xff6633, 0.8);
-rimLight.position.set(-5, 3, -5);
+const rimLight = new THREE.DirectionalLight(0xff6633, 1.2);
+rimLight.position.set(-5, 6, -5);
 scene.add(rimLight);
+
+// Extended red glow — point lights spread across the surface
+const redGlow1 = new THREE.PointLight(0xff4422, 2.5, 18);
+redGlow1.position.set(-6, 4, -6);
+scene.add(redGlow1);
+
+const redGlow2 = new THREE.PointLight(0xff5533, 1.8, 15);
+redGlow2.position.set(-3, 2, -8);
+scene.add(redGlow2);
+
+const redGlow3 = new THREE.PointLight(0xff3311, 1.5, 12);
+redGlow3.position.set(-8, 3, -3);
+scene.add(redGlow3);
 
 const fillLight = new THREE.PointLight(0x4466ff, 1.5, 20);
 fillLight.position.set(0, 8, 0);
