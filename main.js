@@ -16,11 +16,18 @@ const TRAIL_LENGTH = 300;
 const soundPrompt = document.getElementById('sound-prompt');
 let started = false;
 
+let introTime = 0;
+const INTRO_DURATION = 4.5; // seconds for camera descent
+let introComplete = false;
+
 soundPrompt.addEventListener('click', () => {
   soundPrompt.style.display = 'none';
   if (!started) {
     started = true;
+    introTime = 0;
+    introComplete = false;
     initAudio();
+    playIntroSweep();
   }
 });
 
@@ -29,7 +36,8 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x000510, 0.035);
 
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
-camera.position.set(8, 7, 8);
+// Start high above, looking straight down — will descend on intro
+camera.position.set(0, 35, 0);
 camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -502,6 +510,120 @@ function createGradientField() {
   scene.add(group);
 }
 createGradientField();
+
+// ════════════════════════════════════════════════════════════════════════
+// ── INTRO DESCENT SYNTH ───────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════
+
+function playIntroSweep() {
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const dur = INTRO_DURATION;
+
+  // Layer 1: descending pitch sweep — high to low
+  const sweep = audioCtx.createOscillator();
+  sweep.type = 'sawtooth';
+  sweep.frequency.setValueAtTime(800, now);
+  sweep.frequency.exponentialRampToValueAtTime(55, now + dur);
+
+  const sweepGain = audioCtx.createGain();
+  sweepGain.gain.setValueAtTime(0, now);
+  sweepGain.gain.linearRampToValueAtTime(0.06, now + 0.3);
+  sweepGain.gain.setValueAtTime(0.06, now + dur * 0.6);
+  sweepGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+  const sweepFilter = audioCtx.createBiquadFilter();
+  sweepFilter.type = 'lowpass';
+  sweepFilter.Q.value = 4;
+  sweepFilter.frequency.setValueAtTime(4000, now);
+  sweepFilter.frequency.exponentialRampToValueAtTime(200, now + dur);
+
+  sweep.connect(sweepGain).connect(sweepFilter).connect(masterGain);
+  sweep.start(now);
+  sweep.stop(now + dur + 0.5);
+
+  // Layer 2: sine descent an octave above
+  const sweep2 = audioCtx.createOscillator();
+  sweep2.type = 'sine';
+  sweep2.frequency.setValueAtTime(1600, now);
+  sweep2.frequency.exponentialRampToValueAtTime(110, now + dur);
+
+  const sweep2Gain = audioCtx.createGain();
+  sweep2Gain.gain.setValueAtTime(0, now);
+  sweep2Gain.gain.linearRampToValueAtTime(0.03, now + 0.5);
+  sweep2Gain.gain.setValueAtTime(0.03, now + dur * 0.5);
+  sweep2Gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+  sweep2.connect(sweep2Gain).connect(sweepFilter);
+  sweep2.start(now);
+  sweep2.stop(now + dur + 0.5);
+
+  // Layer 3: sub bass rise at the end (landing thud)
+  const sub = audioCtx.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.setValueAtTime(30, now + dur * 0.7);
+  sub.frequency.linearRampToValueAtTime(55, now + dur);
+
+  const subGain = audioCtx.createGain();
+  subGain.gain.setValueAtTime(0, now);
+  subGain.gain.setValueAtTime(0, now + dur * 0.6);
+  subGain.gain.linearRampToValueAtTime(0.1, now + dur * 0.85);
+  subGain.gain.exponentialRampToValueAtTime(0.001, now + dur + 1);
+
+  sub.connect(subGain).connect(masterGain);
+  sub.start(now + dur * 0.6);
+  sub.stop(now + dur + 1.5);
+
+  // Layer 4: filtered noise whoosh
+  const noiseLen = audioCtx.sampleRate * dur;
+  const noiseBuf = audioCtx.createBuffer(1, noiseLen, audioCtx.sampleRate);
+  const noiseData = noiseBuf.getChannelData(0);
+  for (let i = 0; i < noiseLen; i++) {
+    noiseData[i] = (Math.random() * 2 - 1);
+  }
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = noiseBuf;
+
+  const noiseFilter = audioCtx.createBiquadFilter();
+  noiseFilter.type = 'bandpass';
+  noiseFilter.Q.value = 3;
+  noiseFilter.frequency.setValueAtTime(3000, now);
+  noiseFilter.frequency.exponentialRampToValueAtTime(100, now + dur);
+
+  const noiseGain = audioCtx.createGain();
+  noiseGain.gain.setValueAtTime(0, now);
+  noiseGain.gain.linearRampToValueAtTime(0.015, now + 0.2);
+  noiseGain.gain.setValueAtTime(0.015, now + dur * 0.4);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+  noise.connect(noiseFilter).connect(noiseGain).connect(masterGain);
+  noise.start(now);
+  noise.stop(now + dur + 0.5);
+
+  // Layer 5: descending tritone shimmer (eerie, pitch-shifted)
+  const shimmer1 = audioCtx.createOscillator();
+  shimmer1.type = 'triangle';
+  shimmer1.frequency.setValueAtTime(600, now);
+  shimmer1.frequency.exponentialRampToValueAtTime(82.41, now + dur);
+
+  const shimmer2 = audioCtx.createOscillator();
+  shimmer2.type = 'triangle';
+  shimmer2.frequency.setValueAtTime(600 * 1.005, now);
+  shimmer2.frequency.exponentialRampToValueAtTime(82.41 * 1.005, now + dur);
+
+  const shimmerGain = audioCtx.createGain();
+  shimmerGain.gain.setValueAtTime(0, now);
+  shimmerGain.gain.linearRampToValueAtTime(0.02, now + 0.8);
+  shimmerGain.gain.setValueAtTime(0.02, now + dur * 0.5);
+  shimmerGain.gain.exponentialRampToValueAtTime(0.001, now + dur + 1);
+
+  shimmer1.connect(shimmerGain).connect(sweepFilter);
+  shimmer2.connect(shimmerGain);
+  shimmer1.start(now);
+  shimmer2.start(now);
+  shimmer1.stop(now + dur + 1.5);
+  shimmer2.stop(now + dur + 1.5);
+}
 
 // ════════════════════════════════════════════════════════════════════════
 // ── DEEP SYNTH ENGINE (Web Audio API) ─────────────────────────────────
@@ -1046,15 +1168,55 @@ function animate() {
   const dt = clock.getDelta();
   const t = clock.getElapsedTime();
 
-  stepAccumulator += dt;
-  while (stepAccumulator >= STEP_INTERVAL) {
-    stepAccumulator -= STEP_INTERVAL;
-    particles.forEach(p => p.step());
+  // ── Intro camera descent ──────────────────────────────────────────
+  if (started && !introComplete) {
+    introTime += dt;
+    const progress = Math.min(introTime / INTRO_DURATION, 1);
+    // Smooth ease-out curve
+    const ease = 1 - Math.pow(1 - progress, 3);
+
+    // Descend from high above to the orbit position
+    const startY = 35;
+    const endY = 7;
+    const startDist = 0.1; // almost directly above
+    const endDist = 12;
+
+    const currentY = startY + (endY - startY) * ease;
+    const currentDist = startDist + (endDist - startDist) * ease;
+    const angle = ease * 0.8; // slight rotation during descent
+
+    camera.position.set(
+      Math.sin(angle) * currentDist,
+      currentY,
+      Math.cos(angle) * currentDist
+    );
+    camera.lookAt(0, 1, 0);
+
+    // Bloom intensifies during descent
+    bloom.strength = 2.0 - ease * 0.7;
+
+    if (progress >= 1) {
+      introComplete = true;
+      // Hand off to OrbitControls at current position
+      controls.target.set(0, 1, 0);
+      controls.update();
+    }
+  }
+
+  // Only step particles after intro
+  if (introComplete || !started) {
+    stepAccumulator += dt;
+    while (stepAccumulator >= STEP_INTERVAL) {
+      stepAccumulator -= STEP_INTERVAL;
+      particles.forEach(p => p.step());
+    }
   }
   particles.forEach(p => p.updateVisuals());
 
-  // OrbitControls update
-  controls.update();
+  // OrbitControls only after intro
+  if (introComplete) {
+    controls.update();
+  }
 
   // Animate dust
   const dPos = dust.geometry.attributes.position;
