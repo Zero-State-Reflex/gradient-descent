@@ -1357,6 +1357,14 @@ function animate() {
       // Hand off to OrbitControls at current position
       controls.target.set(0, 1, 0);
       controls.update();
+      // Show hint, then fade out
+      const hint = document.getElementById('hint');
+      if (hint) {
+        hint.style.display = 'block';
+        requestAnimationFrame(() => { hint.style.opacity = '1'; });
+        setTimeout(() => { hint.style.opacity = '0'; }, 3500);
+        setTimeout(() => { hint.style.display = 'none'; }, 4500);
+      }
     }
   }
 
