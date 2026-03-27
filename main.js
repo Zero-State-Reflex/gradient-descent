@@ -1140,16 +1140,22 @@ function updateModelPanel(t) {
   if (mIter) mIter.textContent = p.iteration;
   if (confBar) confBar.style.width = confidence + '%';
 
-  // Determine active step based on particle state
+  // Determine active step — each holds long enough to read
+  // Step 1: iterations 0-15 (initialize)
+  // Step 2: iterations 16-50 (compute gradient)
+  // Step 3: iterations 51-120 (update weights)
+  // Step 4: iterations 121-200+ until gradient small (momentum)
+  // Step 5: gradient < 0.3 and not converged (approaching minimum)
+  // Step 6: converged
   if (p.converged) {
     setActiveStep(6);
-  } else if (gradMag < 0.1) {
+  } else if (gradMag < 0.3 && p.iteration > 120) {
     setActiveStep(5);
-  } else if (p.iteration > 20 && gradMag < 1.5) {
+  } else if (p.iteration > 120) {
     setActiveStep(4);
-  } else if (p.iteration > 5) {
+  } else if (p.iteration > 50) {
     setActiveStep(3);
-  } else if (p.iteration > 0) {
+  } else if (p.iteration > 15) {
     setActiveStep(2);
   } else {
     setActiveStep(1);
