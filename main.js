@@ -520,38 +520,38 @@ function playIntroSweep() {
   const now = audioCtx.currentTime;
   const dur = INTRO_DURATION;
 
-  // Layer 1: descending pitch sweep — high to low
+  // Layer 1: descending pitch sweep — 250Hz down to sub bass
   const sweep = audioCtx.createOscillator();
   sweep.type = 'sawtooth';
-  sweep.frequency.setValueAtTime(800, now);
-  sweep.frequency.exponentialRampToValueAtTime(55, now + dur);
+  sweep.frequency.setValueAtTime(250, now);
+  sweep.frequency.exponentialRampToValueAtTime(35, now + dur);
 
   const sweepGain = audioCtx.createGain();
   sweepGain.gain.setValueAtTime(0, now);
-  sweepGain.gain.linearRampToValueAtTime(0.06, now + 0.3);
-  sweepGain.gain.setValueAtTime(0.06, now + dur * 0.6);
+  sweepGain.gain.linearRampToValueAtTime(0.07, now + 0.3);
+  sweepGain.gain.setValueAtTime(0.07, now + dur * 0.6);
   sweepGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
 
   const sweepFilter = audioCtx.createBiquadFilter();
   sweepFilter.type = 'lowpass';
-  sweepFilter.Q.value = 4;
-  sweepFilter.frequency.setValueAtTime(4000, now);
-  sweepFilter.frequency.exponentialRampToValueAtTime(200, now + dur);
+  sweepFilter.Q.value = 3;
+  sweepFilter.frequency.setValueAtTime(800, now);
+  sweepFilter.frequency.exponentialRampToValueAtTime(120, now + dur);
 
   sweep.connect(sweepGain).connect(sweepFilter).connect(masterGain);
   sweep.start(now);
   sweep.stop(now + dur + 0.5);
 
-  // Layer 2: sine descent an octave above
+  // Layer 2: sine a fifth above tracking the descent
   const sweep2 = audioCtx.createOscillator();
   sweep2.type = 'sine';
-  sweep2.frequency.setValueAtTime(1600, now);
-  sweep2.frequency.exponentialRampToValueAtTime(110, now + dur);
+  sweep2.frequency.setValueAtTime(375, now);
+  sweep2.frequency.exponentialRampToValueAtTime(52, now + dur);
 
   const sweep2Gain = audioCtx.createGain();
   sweep2Gain.gain.setValueAtTime(0, now);
-  sweep2Gain.gain.linearRampToValueAtTime(0.03, now + 0.5);
-  sweep2Gain.gain.setValueAtTime(0.03, now + dur * 0.5);
+  sweep2Gain.gain.linearRampToValueAtTime(0.04, now + 0.5);
+  sweep2Gain.gain.setValueAtTime(0.04, now + dur * 0.5);
   sweep2Gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
 
   sweep2.connect(sweep2Gain).connect(sweepFilter);
@@ -586,9 +586,9 @@ function playIntroSweep() {
 
   const noiseFilter = audioCtx.createBiquadFilter();
   noiseFilter.type = 'bandpass';
-  noiseFilter.Q.value = 3;
-  noiseFilter.frequency.setValueAtTime(3000, now);
-  noiseFilter.frequency.exponentialRampToValueAtTime(100, now + dur);
+  noiseFilter.Q.value = 2;
+  noiseFilter.frequency.setValueAtTime(600, now);
+  noiseFilter.frequency.exponentialRampToValueAtTime(60, now + dur);
 
   const noiseGain = audioCtx.createGain();
   noiseGain.gain.setValueAtTime(0, now);
@@ -600,16 +600,16 @@ function playIntroSweep() {
   noise.start(now);
   noise.stop(now + dur + 0.5);
 
-  // Layer 5: descending tritone shimmer (eerie, pitch-shifted)
+  // Layer 5: descending shimmer (low, detuned pair)
   const shimmer1 = audioCtx.createOscillator();
   shimmer1.type = 'triangle';
-  shimmer1.frequency.setValueAtTime(600, now);
-  shimmer1.frequency.exponentialRampToValueAtTime(82.41, now + dur);
+  shimmer1.frequency.setValueAtTime(200, now);
+  shimmer1.frequency.exponentialRampToValueAtTime(45, now + dur);
 
   const shimmer2 = audioCtx.createOscillator();
   shimmer2.type = 'triangle';
-  shimmer2.frequency.setValueAtTime(600 * 1.005, now);
-  shimmer2.frequency.exponentialRampToValueAtTime(82.41 * 1.005, now + dur);
+  shimmer2.frequency.setValueAtTime(200 * 1.005, now);
+  shimmer2.frequency.exponentialRampToValueAtTime(45 * 1.005, now + dur);
 
   const shimmerGain = audioCtx.createGain();
   shimmerGain.gain.setValueAtTime(0, now);

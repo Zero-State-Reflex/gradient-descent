@@ -257,31 +257,46 @@
     <input type="range" id="volume-slider" min="0" max="100" value="60" />
   </div>
 
-  <div id="sound-prompt" style="position:fixed;top:0;left:0;width:100%;height:100%;
-    background:rgba(0,5,16,0.95);display:flex;align-items:center;justify-content:center;
-    z-index:100;cursor:pointer;flex-direction:column;gap:20px;padding:32px;">
-    <img src="/zsr-logo.svg" alt="Zero State Reflex" style="width:80px;height:auto;
-      filter:drop-shadow(0 0 12px rgba(100,180,255,0.4));" />
-    <div style="color:rgba(100,200,255,0.9);font-size:15px;letter-spacing:6px;text-transform:uppercase;
-      text-shadow:0 0 20px rgba(100,180,255,0.3);">
-      Gradient Descent</div>
-    <div style="max-width:520px;text-align:center;line-height:1.8;">
-      <p style="color:rgba(255,255,255,0.55);font-size:13px;letter-spacing:0.5px;font-style:italic;">
-        "An optimization algorithm that iteratively moves toward the minimum of a function by following the steepest downward slope — the negative gradient."
-      </p>
-      <p style="color:rgba(100,200,255,0.4);font-size:11px;letter-spacing:2px;margin-top:16px;text-transform:uppercase;">
-        The foundation of how machines learn
-      </p>
-      <p style="color:rgba(255,255,255,0.35);font-size:11px;margin-top:12px;line-height:1.7;">
-        At every step, the algorithm asks one question: which direction leads downhill?
-        It nudges its parameters along that slope, again and again,
-        descending through a vast landscape of possibilities until it settles
-        into a valley — a place where the error is small and the model has learned.
-      </p>
-    </div>
-    <div style="color:rgba(255,255,255,0.5);font-size:11px;letter-spacing:3px;text-transform:uppercase;
-      margin-top:8px;">
-      click to begin</div>
+  <style>
+    #sound-prompt {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,5,16,0.95); display: flex; align-items: center;
+      justify-content: center; z-index: 100; cursor: pointer;
+      flex-direction: column; gap: 0;
+    }
+    #splash-logo {
+      width: 80px; height: auto;
+      filter: drop-shadow(0 0 12px rgba(100,180,255,0.4));
+      opacity: 0; transform: translateY(-40px);
+      animation: fadeFromTop 1.2s ease-out 0.3s forwards;
+    }
+    #splash-title {
+      color: rgba(100,200,255,0.9); font-size: 15px; letter-spacing: 6px;
+      text-transform: uppercase; text-shadow: 0 0 20px rgba(100,180,255,0.3);
+      margin-top: 24px;
+      opacity: 0; transform: scale(0.95);
+      animation: fadeCenter 1.2s ease-out 0.8s forwards;
+    }
+    #splash-begin {
+      color: rgba(255,255,255,0.5); font-size: 11px; letter-spacing: 3px;
+      text-transform: uppercase; margin-top: 32px;
+      opacity: 0; transform: translateY(30px);
+      animation: fadeFromBottom 1.2s ease-out 1.4s forwards;
+    }
+    @keyframes fadeFromTop {
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeCenter {
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes fadeFromBottom {
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+  <div id="sound-prompt">
+    <img id="splash-logo" src="/zsr-logo.svg" alt="Zero State Reflex" />
+    <div id="splash-title">Gradient Descent</div>
+    <div id="splash-begin">click to begin</div>
   </div>
   <script type="module" src="/main.js"></script>
 </body>
