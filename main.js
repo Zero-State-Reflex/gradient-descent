@@ -949,36 +949,36 @@ function playRestartDrop() {
   if (!audioCtx || muted) return;
   const now = audioCtx.currentTime;
 
-  // Low pitch drop — starts around 120Hz, drops to sub bass
+  // Deep pitch drop — starts around 80Hz, drops to sub
   const osc1 = audioCtx.createOscillator();
   osc1.type = 'sawtooth';
-  osc1.frequency.setValueAtTime(120, now);
-  osc1.frequency.exponentialRampToValueAtTime(22, now + 2.5);
+  osc1.frequency.setValueAtTime(80, now);
+  osc1.frequency.exponentialRampToValueAtTime(18, now + 3);
 
   const osc2 = audioCtx.createOscillator();
   osc2.type = 'sine';
-  osc2.frequency.setValueAtTime(180, now);
-  osc2.frequency.exponentialRampToValueAtTime(30, now + 2.5);
+  osc2.frequency.setValueAtTime(110, now);
+  osc2.frequency.exponentialRampToValueAtTime(22, now + 3);
 
   const gain = audioCtx.createGain();
   gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(0.08, now + 0.1);
-  gain.gain.setValueAtTime(0.08, now + 1.2);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 2.5);
+  gain.gain.linearRampToValueAtTime(0.09, now + 0.1);
+  gain.gain.setValueAtTime(0.09, now + 1.5);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 3);
 
   const filter = audioCtx.createBiquadFilter();
   filter.type = 'lowpass';
   filter.Q.value = 2;
-  filter.frequency.setValueAtTime(400, now);
-  filter.frequency.exponentialRampToValueAtTime(60, now + 2.5);
+  filter.frequency.setValueAtTime(250, now);
+  filter.frequency.exponentialRampToValueAtTime(40, now + 3);
 
   osc1.connect(gain);
   osc2.connect(gain);
   gain.connect(filter).connect(masterGain);
   osc1.start(now);
   osc2.start(now);
-  osc1.stop(now + 3);
-  osc2.stop(now + 3);
+  osc1.stop(now + 3.5);
+  osc2.stop(now + 3.5);
 }
 
 window.addEventListener('dblclick', (e) => {
@@ -1226,7 +1226,7 @@ function updateModelPanel(t) {
 // ── Animation loop ──────────────────────────────────────────────────────
 const clock = new THREE.Clock();
 let stepAccumulator = 0;
-const STEP_INTERVAL = 0.05;
+const STEP_INTERVAL = 0.058; // ~15% slower
 
 function animate() {
   requestAnimationFrame(animate);
