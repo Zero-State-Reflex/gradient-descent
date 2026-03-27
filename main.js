@@ -985,6 +985,8 @@ const mIter = document.getElementById('m-iter');
 const confBar = document.getElementById('confidence-bar');
 const stepEls = [1,2,3,4,5,6].map(i => document.getElementById('step-' + i));
 let currentStep = 0;
+let stepActivatedAt = 0; // timestamp when current step became active
+const MIN_STEP_HOLD = 7; // minimum seconds each step stays lit
 
 // Neural network layout: 3 layers
 const nnLayers = [4, 6, 3]; // input, hidden, output
@@ -1112,9 +1114,12 @@ function drawNeuralNetwork(t, p) {
   }
 }
 
-function setActiveStep(stepNum) {
-  if (stepNum === currentStep) return;
+function setActiveStep(stepNum, t) {
+  if (stepNum <= currentStep) return; // only advance forward
+  // Enforce minimum hold time on current step
+  if (currentStep > 0 && (t - stepActivatedAt) < MIN_STEP_HOLD) return;
   currentStep = stepNum;
+  stepActivatedAt = t;
   stepEls.forEach((el, i) => {
     if (!el) return;
     const num = i + 1;
@@ -1148,17 +1153,17 @@ function updateModelPanel(t) {
   // Step 5: gradient < 0.3 and not converged (approaching minimum)
   // Step 6: converged
   if (p.converged) {
-    setActiveStep(6);
+    setActiveStep(6, t);
   } else if (gradMag < 0.3 && p.iteration > 120) {
-    setActiveStep(5);
+    setActiveStep(5, t);
   } else if (p.iteration > 120) {
-    setActiveStep(4);
+    setActiveStep(4, t);
   } else if (p.iteration > 50) {
-    setActiveStep(3);
+    setActiveStep(3, t);
   } else if (p.iteration > 15) {
-    setActiveStep(2);
+    setActiveStep(2, t);
   } else {
-    setActiveStep(1);
+    setActiveStep(1, t);
   }
 
   // Draw neural network
