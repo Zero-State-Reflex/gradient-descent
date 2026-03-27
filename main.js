@@ -944,10 +944,48 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// ── Restart on double-click (single click is now orbit) ─────────────────
+// ── Restart on double-click with pitch-down effect ──────────────────────
+function playRestartDrop() {
+  if (!audioCtx || muted) return;
+  const now = audioCtx.currentTime;
+
+  // Low pitch drop — starts around 120Hz, drops to sub bass
+  const osc1 = audioCtx.createOscillator();
+  osc1.type = 'sawtooth';
+  osc1.frequency.setValueAtTime(120, now);
+  osc1.frequency.exponentialRampToValueAtTime(22, now + 2.5);
+
+  const osc2 = audioCtx.createOscillator();
+  osc2.type = 'sine';
+  osc2.frequency.setValueAtTime(180, now);
+  osc2.frequency.exponentialRampToValueAtTime(30, now + 2.5);
+
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(0.08, now + 0.1);
+  gain.gain.setValueAtTime(0.08, now + 1.2);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 2.5);
+
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.Q.value = 2;
+  filter.frequency.setValueAtTime(400, now);
+  filter.frequency.exponentialRampToValueAtTime(60, now + 2.5);
+
+  osc1.connect(gain);
+  osc2.connect(gain);
+  gain.connect(filter).connect(masterGain);
+  osc1.start(now);
+  osc2.start(now);
+  osc1.stop(now + 3);
+  osc2.stop(now + 3);
+}
+
 window.addEventListener('dblclick', (e) => {
   if (e.target === soundPrompt || soundPrompt.contains(e.target)) return;
   spawnParticles();
+  resetSteps();
+  playRestartDrop();
 });
 
 window.addEventListener('resize', () => {
@@ -1115,7 +1153,7 @@ function drawNeuralNetwork(t, p) {
 }
 
 function setActiveStep(stepNum, t) {
-  if (stepNum <= currentStep) return; // only advance forward
+  if (stepNum === currentStep) return;
   // Enforce minimum hold time on current step
   if (currentStep > 0 && (t - stepActivatedAt) < MIN_STEP_HOLD) return;
   currentStep = stepNum;
@@ -1126,6 +1164,14 @@ function setActiveStep(stepNum, t) {
     el.classList.remove('active', 'done');
     if (num < stepNum) el.classList.add('done');
     else if (num === stepNum) el.classList.add('active');
+  });
+}
+
+function resetSteps() {
+  currentStep = 0;
+  stepActivatedAt = 0;
+  stepEls.forEach(el => {
+    if (el) el.classList.remove('active', 'done');
   });
 }
 
@@ -1152,17 +1198,24 @@ function updateModelPanel(t) {
   // Step 4: iterations 121-200+ until gradient small (momentum)
   // Step 5: gradient < 0.3 and not converged (approaching minimum)
   // Step 6: converged
+  // Cycle through steps — after step 6 holds, reset and loop
+  if (currentStep === 6 && (t - stepActivatedAt) >= MIN_STEP_HOLD) {
+    resetSteps();
+  }
+
+  // Map iteration progress to steps (relative to current cycle)
+  const iter = p.iteration;
   if (p.converged) {
     setActiveStep(6, t);
-  } else if (gradMag < 0.3 && p.iteration > 120) {
+  } else if (gradMag < 0.3 && iter > 120) {
     setActiveStep(5, t);
-  } else if (p.iteration > 120) {
+  } else if (iter > 120) {
     setActiveStep(4, t);
-  } else if (p.iteration > 50) {
+  } else if (iter > 50) {
     setActiveStep(3, t);
-  } else if (p.iteration > 15) {
+  } else if (iter > 15) {
     setActiveStep(2, t);
-  } else {
+  } else if (currentStep === 0) {
     setActiveStep(1, t);
   }
 
