@@ -68,37 +68,42 @@ const bloom = new UnrealBloomPass(
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
-// ── Loss function: Enhanced with sharper valleys & more terrain detail ──
+// ── Loss function with morph seed ────────────────────────────────────────
+let morphSeed = 0; // changes on each restart to reshape the landscape
+
 function lossFunction(x, z) {
   const scale = 1.2;
+  const s = morphSeed;
   const sx = x * scale, sz = z * scale;
 
   // Base: Styblinski-Tang
   const st = (sx ** 4 - 16 * sx ** 2 + 5 * sx + sz ** 4 - 16 * sz ** 2 + 5 * sz) / 2;
 
-  // Sharp valleys using abs (V-shaped cuts)
-  const valley1 = -1.8 * Math.exp(-Math.abs(sx + sz) * 1.5) * Math.exp(-((sx - sz) ** 2) * 0.1);
-  const valley2 = -1.4 * Math.exp(-Math.abs(sx - 1.0) * 2.0) * Math.exp(-sz * sz * 0.15);
-  const valley3 = -1.2 * Math.exp(-Math.abs(sz + 0.5) * 2.0) * Math.exp(-sx * sx * 0.15);
+  // Seed-shifted valleys
+  const v1x = Math.sin(s * 1.1) * 1.5, v1z = Math.cos(s * 0.9) * 1.5;
+  const valley1 = -1.8 * Math.exp(-Math.abs(sx + sz + v1x) * 1.5) * Math.exp(-((sx - sz + v1z) ** 2) * 0.1);
+  const valley2 = -1.4 * Math.exp(-Math.abs(sx - 1.0 + Math.sin(s * 0.7)) * 2.0) * Math.exp(-sz * sz * 0.15);
+  const valley3 = -1.2 * Math.exp(-Math.abs(sz + 0.5 + Math.cos(s * 1.3)) * 2.0) * Math.exp(-sx * sx * 0.15);
 
-  // Ravine: a narrow diagonal channel
-  const diag = (sx - sz) * 0.707;
+  // Seed-shifted ravine
+  const diagAngle = 0.707 + Math.sin(s * 0.5) * 0.3;
+  const diag = (sx - sz) * diagAngle;
   const ravine = -2.0 * Math.exp(-diag * diag * 4.0) * Math.exp(-((sx + sz) ** 2) * 0.02);
 
-  // Deep pits (local minima)
-  const pit1 = -3.0 * Math.exp(-((sx + 2.8) ** 2 + (sz + 2.8) ** 2) * 1.5);
-  const pit2 = -2.5 * Math.exp(-((sx - 2.5) ** 2 + (sz + 1.5) ** 2) * 1.2);
-  const pit3 = -2.0 * Math.exp(-((sx + 1.0) ** 2 + (sz - 3.0) ** 2) * 1.0);
+  // Seed-shifted pits
+  const pit1 = -3.0 * Math.exp(-((sx + 2.8 + Math.sin(s * 1.7)) ** 2 + (sz + 2.8 + Math.cos(s * 1.2)) ** 2) * 1.5);
+  const pit2 = -2.5 * Math.exp(-((sx - 2.5 + Math.cos(s * 0.8)) ** 2 + (sz + 1.5 + Math.sin(s * 1.5)) ** 2) * 1.2);
+  const pit3 = -2.0 * Math.exp(-((sx + 1.0 + Math.sin(s * 2.1)) ** 2 + (sz - 3.0 + Math.cos(s * 0.6)) ** 2) * 1.0);
 
-  // Ridges
-  const ridge1 = 1.5 * Math.exp(-((sx - 2) ** 2) * 3) * Math.pow(Math.cos(sz * 2), 2);
-  const ridge2 = 1.2 * Math.exp(-((sz + 2) ** 2) * 3) * Math.pow(Math.cos(sx * 1.5), 2);
+  // Seed-shifted ridges
+  const ridge1 = 1.5 * Math.exp(-((sx - 2 + Math.sin(s)) ** 2) * 3) * Math.pow(Math.cos(sz * 2 + s * 0.3), 2);
+  const ridge2 = 1.2 * Math.exp(-((sz + 2 + Math.cos(s)) ** 2) * 3) * Math.pow(Math.cos(sx * 1.5 + s * 0.4), 2);
 
-  // Fine detail: high-freq ripples that show in the surface
-  const detail = 0.15 * Math.sin(sx * 5) * Math.cos(sz * 5)
-    + 0.08 * Math.sin(sx * 8 + sz * 3) * Math.cos(sz * 7 - sx * 2);
+  // Seed-shifted detail
+  const detail = 0.15 * Math.sin(sx * 5 + s) * Math.cos(sz * 5 + s * 0.7)
+    + 0.08 * Math.sin(sx * 8 + sz * 3 + s * 1.1) * Math.cos(sz * 7 - sx * 2 + s * 0.5);
 
-  // Terracing effect in valleys — creates stepped look
+  // Terracing
   const raw = st / 40 + 2;
   const terraced = Math.round(raw * 3) / 3;
   const base = raw * 0.7 + terraced * 0.3;
@@ -198,6 +203,92 @@ const surfaceMat = new THREE.MeshStandardMaterial({
 });
 const surface = new THREE.Mesh(surfaceGeo, surfaceMat);
 scene.add(surface);
+
+// ── Surface morph system ────────────────────────────────────────────────
+const MORPH_DURATION = 2.5; // seconds for smooth transition
+let morphing = false;
+let morphStartTime = 0;
+const morphFromY = new Float32Array(positions.count);
+const morphToY = new Float32Array(positions.count);
+
+function triggerMorph() {
+  morphSeed += 1 + Math.random() * 2;
+
+  // Save current positions as "from"
+  for (let i = 0; i < positions.count; i++) {
+    morphFromY[i] = positions.getY(i);
+  }
+
+  // Compute new target positions and y range
+  let newYMin = Infinity, newYMax = -Infinity;
+  for (let i = 0; i < positions.count; i++) {
+    const x = positions.getX(i);
+    const z = positions.getZ(i);
+    const y = lossFunction(x, z);
+    morphToY[i] = y;
+    newYMin = Math.min(newYMin, y);
+    newYMax = Math.max(newYMax, y);
+  }
+  yMin = newYMin;
+  yMax = newYMax;
+
+  morphing = true;
+  morphStartTime = performance.now() / 1000;
+}
+
+function updateMorph(t) {
+  if (!morphing) return;
+
+  const elapsed = t - morphStartTime;
+  const progress = Math.min(elapsed / MORPH_DURATION, 1);
+  // Smooth ease-in-out
+  const ease = progress < 0.5
+    ? 2 * progress * progress
+    : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+  for (let i = 0; i < positions.count; i++) {
+    const y = morphFromY[i] + (morphToY[i] - morphFromY[i]) * ease;
+    positions.setY(i, y);
+  }
+  positions.needsUpdate = true;
+  surfaceGeo.computeVertexNormals();
+
+  // Update vertex colors
+  const cols = surfaceGeo.attributes.color;
+  for (let i = 0; i < positions.count; i++) {
+    const y = positions.getY(i);
+    const tt = (y - yMin) / (yMax - yMin);
+    const c = new THREE.Color();
+    if (tt < 0.1) {
+      c.lerpColors(new THREE.Color(0x1a0030), new THREE.Color(0x3a1070), tt / 0.1);
+    } else if (tt < 0.25) {
+      c.lerpColors(new THREE.Color(0x3a1070), new THREE.Color(0x0a2a6a), (tt - 0.1) / 0.15);
+    } else if (tt < 0.45) {
+      c.lerpColors(new THREE.Color(0x0a2a6a), new THREE.Color(0x1a5aaa), (tt - 0.25) / 0.2);
+    } else if (tt < 0.65) {
+      c.lerpColors(new THREE.Color(0x1a5aaa), new THREE.Color(0x2d8cf0), (tt - 0.45) / 0.2);
+    } else if (tt < 0.82) {
+      c.lerpColors(new THREE.Color(0x2d8cf0), new THREE.Color(0x60e0ff), (tt - 0.65) / 0.17);
+    } else {
+      c.lerpColors(new THREE.Color(0x60e0ff), new THREE.Color(0xeeffff), (tt - 0.82) / 0.18);
+    }
+    cols.array[i * 3] = c.r;
+    cols.array[i * 3 + 1] = c.g;
+    cols.array[i * 3 + 2] = c.b;
+  }
+  cols.needsUpdate = true;
+
+  // Update Tron grid
+  for (let i = 0; i < tronPos.count; i++) {
+    tronPos.setY(i, lossFunction(tronPos.getX(i), tronPos.getZ(i)) + 0.03);
+  }
+  tronPos.needsUpdate = true;
+  tronGeo.computeVertexNormals();
+
+  if (progress >= 1) {
+    morphing = false;
+  }
+}
 
 
 // ── Valley glow: point lights in the deepest pits ───────────────────────
@@ -983,6 +1074,7 @@ function playRestartDrop() {
 
 window.addEventListener('dblclick', (e) => {
   if (e.target === soundPrompt || soundPrompt.contains(e.target)) return;
+  triggerMorph();
   spawnParticles();
   resetSteps();
   playRestartDrop();
@@ -1277,6 +1369,9 @@ function animate() {
     }
   }
   particles.forEach(p => p.updateVisuals());
+
+  // Surface morph
+  updateMorph(performance.now() / 1000);
 
   // OrbitControls only after intro
   if (introComplete) {
