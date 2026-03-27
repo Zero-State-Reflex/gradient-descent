@@ -979,13 +979,12 @@ function updateStats() {
 const nnCanvas = document.getElementById('nn-canvas');
 const nnCtx = nnCanvas ? nnCanvas.getContext('2d') : null;
 const mLoss = document.getElementById('m-loss');
-const mLr = document.getElementById('m-lr');
 const mGrad = document.getElementById('m-grad');
-const mWeight = document.getElementById('m-weight');
 const mConf = document.getElementById('m-conf');
+const mIter = document.getElementById('m-iter');
 const confBar = document.getElementById('confidence-bar');
-const mPhase = document.getElementById('model-phase');
-const mNarrative = document.getElementById('model-narrative');
+const stepEls = [1,2,3,4,5,6].map(i => document.getElementById('step-' + i));
+let currentStep = 0;
 
 // Neural network layout: 3 layers
 const nnLayers = [4, 6, 3]; // input, hidden, output
@@ -1113,6 +1112,18 @@ function drawNeuralNetwork(t, p) {
   }
 }
 
+function setActiveStep(stepNum) {
+  if (stepNum === currentStep) return;
+  currentStep = stepNum;
+  stepEls.forEach((el, i) => {
+    if (!el) return;
+    const num = i + 1;
+    el.classList.remove('active', 'done');
+    if (num < stepNum) el.classList.add('done');
+    else if (num === stepNum) el.classList.add('active');
+  });
+}
+
 function updateModelPanel(t) {
   const p = particles[0];
   if (!p) return;
@@ -1121,38 +1132,28 @@ function updateModelPanel(t) {
   const gradMag = Math.sqrt(gx * gx + gz * gz);
   const normalizedLoss = Math.max(0, Math.min(1, (p.y - yMin) / (yMax - yMin)));
   const confidence = ((1 - normalizedLoss) * 100);
-  const speed = Math.sqrt(p.vx ** 2 + p.vz ** 2);
-  const weightUpdate = speed * LEARNING_RATE;
 
-  // Update values
-  if (mLoss) mLoss.textContent = p.y.toFixed(4);
-  if (mLr) mLr.textContent = LEARNING_RATE.toFixed(3);
-  if (mGrad) mGrad.textContent = gradMag.toFixed(4);
-  if (mWeight) mWeight.textContent = (weightUpdate > 0.0001 ? weightUpdate.toFixed(6) : '~0');
-  if (mConf) mConf.textContent = confidence.toFixed(1) + '%';
+  // Update stats
+  if (mLoss) mLoss.textContent = p.y.toFixed(3);
+  if (mGrad) mGrad.textContent = gradMag.toFixed(3);
+  if (mConf) mConf.textContent = confidence.toFixed(0) + '%';
+  if (mIter) mIter.textContent = p.iteration;
   if (confBar) confBar.style.width = confidence + '%';
 
-  // Phase and narrative
-  let phase, narrative;
+  // Determine active step based on particle state
   if (p.converged) {
-    phase = '<span style="color:#44ff88">converged</span>';
-    narrative = 'The model has settled into a minimum. Weights are stable — the network has found a configuration where its predictions minimize error. This is what a trained model looks like.';
-  } else if (gradMag > 2) {
-    phase = '<span style="color:#ff6644">exploring</span>';
-    narrative = 'The gradient is steep — the model is far from optimal. Large weight updates are pushing it rapidly downhill. Each step dramatically changes what the network predicts.';
-  } else if (gradMag > 0.5) {
-    phase = '<span style="color:#ffaa44">descending</span>';
-    narrative = 'The model is making steady progress. The slope is clear and the weights adjust with each step, gradually improving predictions as error decreases.';
-  } else if (gradMag > 0.1) {
-    phase = '<span style="color:#44aaff">refining</span>';
-    narrative = 'Near a valley now. The gradient is small — weight updates are fine-grained. The model is tuning its parameters with precision, like focusing a lens.';
+    setActiveStep(6);
+  } else if (gradMag < 0.1) {
+    setActiveStep(5);
+  } else if (p.iteration > 20 && gradMag < 1.5) {
+    setActiveStep(4);
+  } else if (p.iteration > 5) {
+    setActiveStep(3);
+  } else if (p.iteration > 0) {
+    setActiveStep(2);
   } else {
-    phase = '<span style="color:#88ddff">settling</span>';
-    narrative = 'Almost flat terrain. The model is oscillating near a minimum, making tiny adjustments. Momentum may carry it past — or it may settle here.';
+    setActiveStep(1);
   }
-
-  if (mPhase) mPhase.innerHTML = phase;
-  if (mNarrative) mNarrative.textContent = narrative;
 
   // Draw neural network
   drawNeuralNetwork(t, p);
