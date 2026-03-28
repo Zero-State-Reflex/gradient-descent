@@ -211,27 +211,85 @@ let morphStartTime = 0;
 let morphSeedFrom = 0;
 let morphSeedTo = 0;
 
-// ── Spacetime distortion ripple (invisible — vertex displacement only) ──
-const RIPPLE_DURATION = 3.5;
-const RIPPLE_MAX_RADIUS = 28;
+// ── Spacetime ripple shockwave ───────────────────────────────────────────
+const RIPPLE_DURATION = 3.0;
+const RIPPLE_MAX_RADIUS = 25;
 let rippleActive = false;
 let rippleStartTime = 0;
+
+// Ripple ring mesh — a flat torus that expands
+const rippleGeo = new THREE.RingGeometry(0.5, 1.0, 128);
+rippleGeo.rotateX(-Math.PI / 2);
+const rippleMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uProgress: { value: 0 },
+    uColor: { value: new THREE.Color(0x4488ff) },
+  },
+  vertexShader: `
+    uniform float uProgress;
+    varying float vAlpha;
+    void main() {
+      // Scale ring outward
+      float scale = uProgress * ${RIPPLE_MAX_RADIUS.toFixed(1)};
+      vec3 pos = position * scale;
+      pos.y = sin(uProgress * 3.14159) * 0.5; // slight vertical arc
+      vAlpha = 1.0 - uProgress;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 uColor;
+    varying float vAlpha;
+    void main() {
+      gl_FragColor = vec4(uColor, vAlpha * 0.6);
+    }
+  `,
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+});
+const rippleMesh = new THREE.Mesh(rippleGeo, rippleMat);
+rippleMesh.position.y = 1;
+rippleMesh.visible = false;
+scene.add(rippleMesh);
+
+// Second ripple ring (delayed, different color)
+const ripple2Mat = rippleMat.clone();
+ripple2Mat.uniforms = {
+  uProgress: { value: 0 },
+  uColor: { value: new THREE.Color(0x6622cc) },
+};
+const ripple2Mesh = new THREE.Mesh(rippleGeo, ripple2Mat);
+ripple2Mesh.position.y = 1;
+ripple2Mesh.visible = false;
+scene.add(ripple2Mesh);
 
 function triggerRipple() {
   rippleActive = true;
   rippleStartTime = performance.now() / 1000;
+  rippleMesh.visible = true;
+  ripple2Mesh.visible = true;
 }
 
 function updateRipple(t) {
   if (!rippleActive) return;
+
   const elapsed = t - rippleStartTime;
-  if (elapsed >= RIPPLE_DURATION) {
+  const p1 = Math.min(elapsed / RIPPLE_DURATION, 1);
+  const p2 = Math.min(Math.max((elapsed - 0.3) / RIPPLE_DURATION, 0), 1); // delayed ring
+
+  rippleMat.uniforms.uProgress.value = p1;
+  ripple2Mat.uniforms.uProgress.value = p2;
+
+  // Bloom spike during ripple
+  bloom.strength = 1.3 + 1.5 * Math.sin(p1 * Math.PI) * (1 - p1);
+
+  if (p1 >= 1 && p2 >= 1) {
     rippleActive = false;
-    return;
+    rippleMesh.visible = false;
+    ripple2Mesh.visible = false;
   }
-  // Subtle bloom breathe during distortion
-  const p = elapsed / RIPPLE_DURATION;
-  bloom.strength = 1.3 + 0.6 * Math.sin(p * Math.PI) * (1 - p);
 }
 
 function triggerMorph() {
@@ -1400,44 +1458,23 @@ function animate() {
   updateMorph(nowSec);
   updateRipple(nowSec);
 
-  // Invisible ripple — distort the existing surface with an expanding wave
+  // Ripple wave displacement on the surface during morph
   if (rippleActive) {
     const rippleElapsed = nowSec - rippleStartTime;
     const waveRadius = (rippleElapsed / RIPPLE_DURATION) * RIPPLE_MAX_RADIUS;
-    const waveWidth = 4.0;
-    const fade = Math.max(0, 1 - rippleElapsed / RIPPLE_DURATION);
-    const waveAmp = 0.5 * fade * fade; // quadratic fade for smooth dissipation
-
+    const waveWidth = 3.0;
+    const waveAmp = 0.4 * Math.max(0, 1 - rippleElapsed / RIPPLE_DURATION);
     for (let i = 0; i < positions.count; i++) {
       const x = positions.getX(i);
       const z = positions.getZ(i);
       const dist = Math.sqrt(x * x + z * z);
-      const delta = dist - waveRadius;
-
-      // Two-sided wavefront: smooth bell curve around the ring
-      if (Math.abs(delta) < waveWidth) {
-        const envelope = Math.cos((delta / waveWidth) * Math.PI * 0.5);
-        // Sinusoidal displacement — multiple oscillations in the wavefront
-        const wave = envelope * waveAmp * Math.sin(delta * 3.0 - rippleElapsed * 6);
-        positions.array[i * 3 + 1] += wave;
+      const delta = Math.abs(dist - waveRadius);
+      if (delta < waveWidth) {
+        const wave = Math.cos((delta / waveWidth) * Math.PI * 0.5);
+        positions.array[i * 3 + 1] += wave * waveAmp * Math.sin(dist * 2 - rippleElapsed * 8);
       }
     }
     positions.needsUpdate = true;
-    surfaceGeo.computeVertexNormals();
-
-    // Distort the Tron grid too
-    for (let i = 0; i < tronPos.count; i++) {
-      const x = tronPos.getX(i);
-      const z = tronPos.getZ(i);
-      const dist = Math.sqrt(x * x + z * z);
-      const delta = dist - waveRadius;
-      if (Math.abs(delta) < waveWidth) {
-        const envelope = Math.cos((delta / waveWidth) * Math.PI * 0.5);
-        const wave = envelope * waveAmp * Math.sin(delta * 3.0 - rippleElapsed * 6);
-        tronPos.array[i * 3 + 1] += wave;
-      }
-    }
-    tronPos.needsUpdate = true;
   }
 
   // OrbitControls only after intro
