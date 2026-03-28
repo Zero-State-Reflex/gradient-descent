@@ -204,34 +204,16 @@ const surfaceMat = new THREE.MeshStandardMaterial({
 const surface = new THREE.Mesh(surfaceGeo, surfaceMat);
 scene.add(surface);
 
-// ── Surface morph system ────────────────────────────────────────────────
-const MORPH_DURATION = 2.5; // seconds for smooth transition
+// ── Surface morph system (smooth seed interpolation) ────────────────────
+const MORPH_DURATION = 3.5; // seconds for smooth transition
 let morphing = false;
 let morphStartTime = 0;
-const morphFromY = new Float32Array(positions.count);
-const morphToY = new Float32Array(positions.count);
+let morphSeedFrom = 0;
+let morphSeedTo = 0;
 
 function triggerMorph() {
-  morphSeed += 1 + Math.random() * 2;
-
-  // Save current positions as "from"
-  for (let i = 0; i < positions.count; i++) {
-    morphFromY[i] = positions.getY(i);
-  }
-
-  // Compute new target positions and y range
-  let newYMin = Infinity, newYMax = -Infinity;
-  for (let i = 0; i < positions.count; i++) {
-    const x = positions.getX(i);
-    const z = positions.getZ(i);
-    const y = lossFunction(x, z);
-    morphToY[i] = y;
-    newYMin = Math.min(newYMin, y);
-    newYMax = Math.max(newYMax, y);
-  }
-  yMin = newYMin;
-  yMax = newYMax;
-
+  morphSeedFrom = morphSeed;
+  morphSeedTo = morphSeed + 1.5 + Math.random() * 1.5;
   morphing = true;
   morphStartTime = performance.now() / 1000;
 }
@@ -241,15 +223,26 @@ function updateMorph(t) {
 
   const elapsed = t - morphStartTime;
   const progress = Math.min(elapsed / MORPH_DURATION, 1);
-  // Smooth ease-in-out
+  // Smooth ease-in-out (cubic)
   const ease = progress < 0.5
-    ? 2 * progress * progress
-    : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+    ? 4 * progress * progress * progress
+    : 1 - Math.pow(-2 * progress + 2, 3) / 2;
 
+  // Smoothly interpolate the seed — the loss function continuously deforms
+  morphSeed = morphSeedFrom + (morphSeedTo - morphSeedFrom) * ease;
+
+  // Recompute surface from the smoothly changing loss function
+  let newYMin = Infinity, newYMax = -Infinity;
   for (let i = 0; i < positions.count; i++) {
-    const y = morphFromY[i] + (morphToY[i] - morphFromY[i]) * ease;
+    const x = positions.getX(i);
+    const z = positions.getZ(i);
+    const y = lossFunction(x, z);
     positions.setY(i, y);
+    newYMin = Math.min(newYMin, y);
+    newYMax = Math.max(newYMax, y);
   }
+  yMin = newYMin;
+  yMax = newYMax;
   positions.needsUpdate = true;
   surfaceGeo.computeVertexNormals();
 
@@ -278,7 +271,7 @@ function updateMorph(t) {
   }
   cols.needsUpdate = true;
 
-  // Update Tron grid
+  // Update Tron grid smoothly
   for (let i = 0; i < tronPos.count; i++) {
     tronPos.setY(i, lossFunction(tronPos.getX(i), tronPos.getZ(i)) + 0.03);
   }
