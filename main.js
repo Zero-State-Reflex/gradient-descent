@@ -211,11 +211,93 @@ let morphStartTime = 0;
 let morphSeedFrom = 0;
 let morphSeedTo = 0;
 
+// ── Spacetime ripple shockwave ───────────────────────────────────────────
+const RIPPLE_DURATION = 3.0;
+const RIPPLE_MAX_RADIUS = 25;
+let rippleActive = false;
+let rippleStartTime = 0;
+
+// Ripple ring mesh — a flat torus that expands
+const rippleGeo = new THREE.RingGeometry(0.5, 1.0, 128);
+rippleGeo.rotateX(-Math.PI / 2);
+const rippleMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uProgress: { value: 0 },
+    uColor: { value: new THREE.Color(0x4488ff) },
+  },
+  vertexShader: `
+    uniform float uProgress;
+    varying float vAlpha;
+    void main() {
+      // Scale ring outward
+      float scale = uProgress * ${RIPPLE_MAX_RADIUS.toFixed(1)};
+      vec3 pos = position * scale;
+      pos.y = sin(uProgress * 3.14159) * 0.5; // slight vertical arc
+      vAlpha = 1.0 - uProgress;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 uColor;
+    varying float vAlpha;
+    void main() {
+      gl_FragColor = vec4(uColor, vAlpha * 0.6);
+    }
+  `,
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+});
+const rippleMesh = new THREE.Mesh(rippleGeo, rippleMat);
+rippleMesh.position.y = 1;
+rippleMesh.visible = false;
+scene.add(rippleMesh);
+
+// Second ripple ring (delayed, different color)
+const ripple2Mat = rippleMat.clone();
+ripple2Mat.uniforms = {
+  uProgress: { value: 0 },
+  uColor: { value: new THREE.Color(0x6622cc) },
+};
+const ripple2Mesh = new THREE.Mesh(rippleGeo, ripple2Mat);
+ripple2Mesh.position.y = 1;
+ripple2Mesh.visible = false;
+scene.add(ripple2Mesh);
+
+function triggerRipple() {
+  rippleActive = true;
+  rippleStartTime = performance.now() / 1000;
+  rippleMesh.visible = true;
+  ripple2Mesh.visible = true;
+}
+
+function updateRipple(t) {
+  if (!rippleActive) return;
+
+  const elapsed = t - rippleStartTime;
+  const p1 = Math.min(elapsed / RIPPLE_DURATION, 1);
+  const p2 = Math.min(Math.max((elapsed - 0.3) / RIPPLE_DURATION, 0), 1); // delayed ring
+
+  rippleMat.uniforms.uProgress.value = p1;
+  ripple2Mat.uniforms.uProgress.value = p2;
+
+  // Bloom spike during ripple
+  bloom.strength = 1.3 + 1.5 * Math.sin(p1 * Math.PI) * (1 - p1);
+
+  if (p1 >= 1 && p2 >= 1) {
+    rippleActive = false;
+    rippleMesh.visible = false;
+    ripple2Mesh.visible = false;
+  }
+}
+
 function triggerMorph() {
   morphSeedFrom = morphSeed;
   morphSeedTo = morphSeed + 1.5 + Math.random() * 1.5;
   morphing = true;
   morphStartTime = performance.now() / 1000;
+  triggerRipple();
 }
 
 function updateMorph(t) {
@@ -1371,8 +1453,29 @@ function animate() {
   }
   particles.forEach(p => p.updateVisuals());
 
-  // Surface morph
-  updateMorph(performance.now() / 1000);
+  // Surface morph + ripple
+  const nowSec = performance.now() / 1000;
+  updateMorph(nowSec);
+  updateRipple(nowSec);
+
+  // Ripple wave displacement on the surface during morph
+  if (rippleActive) {
+    const rippleElapsed = nowSec - rippleStartTime;
+    const waveRadius = (rippleElapsed / RIPPLE_DURATION) * RIPPLE_MAX_RADIUS;
+    const waveWidth = 3.0;
+    const waveAmp = 0.4 * Math.max(0, 1 - rippleElapsed / RIPPLE_DURATION);
+    for (let i = 0; i < positions.count; i++) {
+      const x = positions.getX(i);
+      const z = positions.getZ(i);
+      const dist = Math.sqrt(x * x + z * z);
+      const delta = Math.abs(dist - waveRadius);
+      if (delta < waveWidth) {
+        const wave = Math.cos((delta / waveWidth) * Math.PI * 0.5);
+        positions.array[i * 3 + 1] += wave * waveAmp * Math.sin(dist * 2 - rippleElapsed * 8);
+      }
+    }
+    positions.needsUpdate = true;
+  }
 
   // OrbitControls only after intro
   if (introComplete) {
