@@ -1325,23 +1325,22 @@ function animate() {
     // Smooth ease-out curve
     const ease = 1 - Math.pow(1 - progress, 3);
 
-    // Descend from high above to a dramatic low close-up angle
+    // Descend from high above to the orbit position
     const startY = 35;
-    const endY = 3;       // low, near surface level
-    const startDist = 0.1;
-    const endDist = 7;    // close to the terrain
+    const endY = 7;
+    const startDist = 0.1; // almost directly above
+    const endDist = 12;
 
     const currentY = startY + (endY - startY) * ease;
     const currentDist = startDist + (endDist - startDist) * ease;
-    const angle = ease * 1.2; // more rotation during descent
+    const angle = ease * 0.8; // slight rotation during descent
 
     camera.position.set(
       Math.sin(angle) * currentDist,
       currentY,
       Math.cos(angle) * currentDist
     );
-    // Look slightly upward at the peaks
-    camera.lookAt(0, 2.5, 0);
+    camera.lookAt(0, 1, 0);
 
     // Bloom intensifies during descent
     bloom.strength = 2.0 - ease * 0.7;
@@ -1349,7 +1348,7 @@ function animate() {
     if (progress >= 1) {
       introComplete = true;
       // Hand off to OrbitControls at current position
-      controls.target.set(0, 2.5, 0);
+      controls.target.set(0, 1, 0);
       controls.update();
       // Show hint, then fade out
       const hint = document.getElementById('hint');
